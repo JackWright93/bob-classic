@@ -43,7 +43,7 @@ export default function Home() {
     setError(null);
     const { error } = await supabase.auth.signInWithOtp({
       email: "jackbwright119@gmail.com",
-      options: { emailRedirectTo: "http://localhost:3000" },
+      options: { emailRedirectTo: "https://bob-classic.vercel.app",},
     });
     if (error) { setError(error.message); return; }
     alert("Check your email for the login link.");
