@@ -44,12 +44,20 @@ export default function Home() {
 
   const login = async () => {
     setError(null);
-    if (!loginEmail) { setError("Please enter your email."); return; }
+    if (!loginEmail) {
+      setError("Please enter your email.");
+      return;
+    }
     const { error } = await supabase.auth.signInWithOtp({
       email: loginEmail,
-      options: { emailRedirectTo: "https://bob-classic.vercel.app" },
+      options: {
+        emailRedirectTo: "https://bob-classic.vercel.app/auth/callback",
+      },
     });
-    if (error) { setError(error.message); return; }
+    if (error) {
+      setError(error.message);
+      return;
+    }
     alert("Check your email for the login link.");
   };
 
@@ -77,16 +85,29 @@ export default function Home() {
       setError(null);
 
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { setLoading(false); return; }
+      if (!session) {
+        setLoading(false);
+        return;
+      }
       setSessionEmail(session.user.email ?? null);
 
-      const { data: allP } = await supabase.from("players").select("id, name, is_admin, base_handicap");
+      const { data: allP } = await supabase
+        .from("players")
+        .select("id, name, is_admin, base_handicap");
       setAllPlayers(allP ?? []);
 
       const { data: meData, error: meError } = await supabase
-        .from("players").select("*").eq("auth_user_id", session.user.id).limit(1).maybeSingle();
+        .from("players")
+        .select("*")
+        .eq("auth_user_id", session.user.id)
+        .limit(1)
+        .maybeSingle();
 
-      if (meError) { setError(meError.message); setLoading(false); return; }
+      if (meError) {
+        setError(meError.message);
+        setLoading(false);
+        return;
+      }
 
       if (!meData || !meData.trip_id) {
         setNeedsPlayerLink(true);
@@ -96,21 +117,38 @@ export default function Home() {
 
       const tripId = meData.trip_id as string;
 
-      const { data: tripData } = await supabase.from("trips").select("id, name, invite_code").eq("id", tripId).limit(1).maybeSingle();
+      const { data: tripData } = await supabase
+        .from("trips")
+        .select("id, name, invite_code")
+        .eq("id", tripId)
+        .limit(1)
+        .maybeSingle();
       if (tripData) setTrip(tripData);
 
-      const { data: playerData } = await supabase.from("players").select("id, name, is_admin, base_handicap").eq("trip_id", tripId).order("name");
+      const { data: playerData } = await supabase
+        .from("players")
+        .select("id, name, is_admin, base_handicap")
+        .eq("trip_id", tripId)
+        .order("name");
       setPlayers(playerData ?? []);
 
-      const { data: roundData } = await supabase.from("rounds").select("id, name, scorecard_key, sort_order").eq("trip_id", tripId).order("sort_order");
+      const { data: roundData } = await supabase
+        .from("rounds")
+        .select("id, name, scorecard_key, sort_order")
+        .eq("trip_id", tripId)
+        .order("sort_order");
       setRounds(roundData ?? []);
 
       setLoading(false);
     };
 
     run();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => { run(); });
-    return () => { subscription.unsubscribe(); };
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      run();
+    });
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   return (
