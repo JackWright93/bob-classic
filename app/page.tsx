@@ -38,16 +38,18 @@ export default function Home() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [rounds, setRounds] = useState<Round[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loginEmail, setLoginEmail] = useState("");
 
-  const login = async () => {
-    setError(null);
-    const { error } = await supabase.auth.signInWithOtp({
-      email: "jackbwright119@gmail.com",
-      options: { emailRedirectTo: "https://bob-classic.vercel.app",},
-    });
-    if (error) { setError(error.message); return; }
-    alert("Check your email for the login link.");
-  };
+const login = async () => {
+  setError(null);
+  if (!loginEmail) { setError("Please enter your email."); return; }
+  const { error } = await supabase.auth.signInWithOtp({
+    email: loginEmail,
+    options: { emailRedirectTo: "https://bob-classic.vercel.app" },
+  });
+  if (error) { setError(error.message); return; }
+  alert("Check your email for the login link.");
+};
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -111,9 +113,16 @@ export default function Home() {
             <div style={{ fontSize: 48, marginBottom: 16 }}>🏌️</div>
             <h2 style={{ fontSize: 20, fontWeight: "bold", marginBottom: 8, color: "#111" }}>Welcome</h2>
             <p style={{ color: GRAY, marginBottom: 24, fontSize: 14 }}>Sign in to access your scorecard and leaderboard.</p>
-            <button onClick={login} style={{ width: "100%", padding: "14px", fontSize: 16, fontWeight: "bold", borderRadius: 10, border: "none", background: GREEN, color: WHITE, cursor: "pointer" }}>
-              📧 Email me a login link
-            </button>
+            <input
+  type="email"
+  placeholder="Enter your email"
+  value={loginEmail}
+  onChange={(e) => setLoginEmail(e.target.value)}
+  style={{ width: "100%", padding: "14px", fontSize: 16, borderRadius: 10, border: "1px solid #d1d5db", marginBottom: 12, boxSizing: "border-box" as const }}
+/>
+<button onClick={login} style={{ width: "100%", padding: "14px", fontSize: 16, fontWeight: "bold", borderRadius: 10, border: "none", background: GREEN, color: WHITE, cursor: "pointer" }}>
+  📧 Email me a login link
+</button>
             {error && <p style={{ color: "red", marginTop: 12, fontSize: 13 }}>{error}</p>}
           </div>
         )}
