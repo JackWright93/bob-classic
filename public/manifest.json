@@ -1,0 +1,16 @@
+{
+  "name": "The Bob Classic",
+  "short_name": "Bob Classic",
+  "description": "The Bob Classic Golf Tournament App",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a6b3c",
+  "theme_color": "#1a6b3c",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
