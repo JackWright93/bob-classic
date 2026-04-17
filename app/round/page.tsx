@@ -309,7 +309,11 @@ function RoundPageInner() {
                 ) : (
                   <div style={{ display: "grid", gap: 10 }}>
                     {teamLeaderboard.map((entry, index) => {
-                      const parTotal = holes.slice(0, entry.holesPlayed).reduce((sum, h) => sum + h.par, 0);
+                      const parTotal = holes
+  .filter((h) => allScores.some((s) =>
+    entry.members.some((m) => s.player_id === m.id && s.hole_no === h.hole_no)
+  ))
+  .reduce((sum, h) => sum + h.par, 0);
                       const diff = entry.holesPlayed > 0 ? entry.bestBallTotal - parTotal : null;
                       const diffStr = diff === null ? "—" : diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`;
                       const diffColor = diff === null ? GRAY : diff < 0 ? GREEN : diff > 0 ? "#ef4444" : GRAY;
