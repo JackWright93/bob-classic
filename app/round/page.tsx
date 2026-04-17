@@ -124,6 +124,17 @@ function RoundPageInner() {
     loadAllScores();
   };
 
+  const clearScore = async (holeNo: number) => {
+    if (!playerId || !roundId) return;
+    setScores((prev) => prev.map((s) => s.hole_no === holeNo ? { ...s, strokes: null } : s));
+    await supabase.from("hole_scores")
+      .delete()
+      .eq("round_id", roundId)
+      .eq("player_id", playerId)
+      .eq("hole_no", holeNo);
+    loadAllScores();
+  };
+
   const claimAward = async (holeNo: number, type: string) => {
     if (!playerId || !roundId) return;
     const existing = specialAwards.find((a) => a.hole_no === holeNo && a.type === type && a.player_id === playerId);
@@ -195,8 +206,6 @@ function RoundPageInner() {
 
   return (
     <main style={{ minHeight: "100vh", background: "#f5f7f5", fontFamily: "Arial, sans-serif" }}>
-
-      {/* Header */}
       <div style={{ background: GREEN, padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
         <button onClick={() => router.push("/")} style={{ background: "none", border: "none", color: WHITE, fontSize: 20, cursor: "pointer", padding: 0 }}>←</button>
         <div>
@@ -206,13 +215,11 @@ function RoundPageInner() {
       </div>
 
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "20px 16px" }}>
-
         {loading && <p style={{ textAlign: "center", color: GRAY }}>Loading...</p>}
         {error && <p style={{ color: "red" }}>{error}</p>}
 
         {!loading && !error && (
           <>
-            {/* Tabs */}
             <div style={{ display: "flex", gap: 8, marginBottom: 20, background: WHITE, borderRadius: 12, padding: 4, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
               {[
                 { key: "score", label: "🏌️ My Score" },
@@ -225,7 +232,6 @@ function RoundPageInner() {
               ))}
             </div>
 
-            {/* SCORE TAB */}
             {activeTab === "score" && (
               <>
                 <div style={{ background: WHITE, borderRadius: 12, padding: "12px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
@@ -249,18 +255,14 @@ function RoundPageInner() {
                       <div key={hole.hole_no} style={{ background: label ? label.bg : WHITE, borderRadius: 12, padding: "14px 16px", border: `1px solid ${label ? label.color + "33" : "#e5e7eb"}`, boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ background: GREEN, color: WHITE, borderRadius: 6, padding: "2px 8px", fontSize: 13, fontWeight: "bold" }}>
-                              {hole.hole_no}
-                            </span>
+                            <span style={{ background: GREEN, color: WHITE, borderRadius: 6, padding: "2px 8px", fontSize: 13, fontWeight: "bold" }}>{hole.hole_no}</span>
                             <span style={{ color: GRAY, fontSize: 13 }}>Par {hole.par}</span>
                             {!isSandCreek && hole.stroke_index && (
                               <span style={{ color: "#9ca3af", fontSize: 12 }}>SI {hole.stroke_index}</span>
                             )}
                           </div>
                           {label && (
-                            <span style={{ fontSize: 13, fontWeight: "bold", color: label.color, background: WHITE, borderRadius: 6, padding: "2px 8px" }}>
-                              {label.label}
-                            </span>
+                            <span style={{ fontSize: 13, fontWeight: "bold", color: label.color, background: WHITE, borderRadius: 6, padding: "2px 8px" }}>{label.label}</span>
                           )}
                         </div>
 
@@ -272,6 +274,10 @@ function RoundPageInner() {
                           </div>
                           <button onClick={() => updateScore(hole.hole_no, (strokes ?? hole.par - 1) + 1)}
                             style={{ width: 44, height: 44, borderRadius: "0 10px 10px 0", border: "1px solid #d1d5db", borderLeft: "none", fontSize: 22, cursor: "pointer", background: WHITE, color: "#374151", fontWeight: "bold" }}>+</button>
+                          {strokes !== null && (
+                            <button onClick={() => clearScore(hole.hole_no)}
+                              style={{ width: 36, height: 36, borderRadius: "50%", border: "1px solid #fee2e2", background: "#fee2e2", color: "#ef4444", cursor: "pointer", fontSize: 16, marginLeft: 8, fontWeight: "bold" }}>✕</button>
+                          )}
                         </div>
 
                         {specialHoles.filter((sh) => sh.hole_no === hole.hole_no).map((sh) => {
@@ -295,7 +301,6 @@ function RoundPageInner() {
               </>
             )}
 
-            {/* TEAM TAB */}
             {activeTab === "team" && (
               <div>
                 <p style={{ fontSize: 13, color: GRAY, marginBottom: 16 }}>Live best ball (net) standings</p>
@@ -309,7 +314,7 @@ function RoundPageInner() {
                       const diffStr = diff === null ? "—" : diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`;
                       const diffColor = diff === null ? GRAY : diff < 0 ? GREEN : diff > 0 ? "#ef4444" : GRAY;
                       return (
-                        <div key={entry.team.id} style={{ background: index === 0 ? LIGHT_GREEN : WHITE, borderRadius: 12, padding: "16px", border: index === 0 ? `2px solid ${GREEN}` : "1px solid #e5e7eb", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+                        <div key={entry.team.id} style={{ background: index === 0 ? LIGHT_GREEN : WHITE, borderRadius: 12, padding: 16, border: index === 0 ? `2px solid ${GREEN}` : "1px solid #e5e7eb", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                               <span style={{ fontSize: 20 }}>{index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉"}</span>
@@ -331,7 +336,6 @@ function RoundPageInner() {
               </div>
             )}
 
-            {/* INDIVIDUAL TAB */}
             {activeTab === "individual" && (
               <div>
                 <p style={{ fontSize: 13, color: GRAY, marginBottom: 16 }}>Live gross scores — top 3 earn points</p>
