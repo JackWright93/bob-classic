@@ -39,17 +39,19 @@ export default function Home() {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loginEmail, setLoginEmail] = useState("");
+  const [needsPlayerLink, setNeedsPlayerLink] = useState(false);
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
 
-const login = async () => {
-  setError(null);
-  if (!loginEmail) { setError("Please enter your email."); return; }
-  const { error } = await supabase.auth.signInWithOtp({
-    email: loginEmail,
-    options: { emailRedirectTo: "https://bob-classic.vercel.app" },
-  });
-  if (error) { setError(error.message); return; }
-  alert("Check your email for the login link.");
-};
+  const login = async () => {
+    setError(null);
+    if (!loginEmail) { setError("Please enter your email."); return; }
+    const { error } = await supabase.auth.signInWithOtp({
+      email: loginEmail,
+      options: { emailRedirectTo: "https://bob-classic.vercel.app" },
+    });
+    if (error) { setError(error.message); return; }
+    alert("Check your email for the login link.");
+  };
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -58,22 +60,42 @@ const login = async () => {
     setRounds([]);
     setSessionEmail(null);
     setError(null);
+    setNeedsPlayerLink(false);
+  };
+
+  const linkPlayer = async (playerId: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    await supabase.from("players").update({ auth_user_id: session.user.id }).eq("id", playerId);
+    setNeedsPlayerLink(false);
+    window.location.reload();
   };
 
   useEffect(() => {
     const run = async () => {
       setLoading(true);
       setError(null);
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { setLoading(false); return; }
       setSessionEmail(session.user.email ?? null);
 
+      const { data: allP } = await supabase.from("players").select("id, name, is_admin, base_handicap");
+      setAllPlayers(allP ?? []);
+
       const { data: meData, error: meError } = await supabase
         .from("players").select("*").eq("auth_user_id", session.user.id).limit(1).maybeSingle();
+
       if (meError) { setError(meError.message); setLoading(false); return; }
-      if (!meData || !meData.trip_id) { setError(`No player found for auth user: ${session.user.id}`); setLoading(false); return; }
+
+      if (!meData || !meData.trip_id) {
+        setNeedsPlayerLink(true);
+        setLoading(false);
+        return;
+      }
 
       const tripId = meData.trip_id as string;
+
       const { data: tripData } = await supabase.from("trips").select("id, name, invite_code").eq("id", tripId).limit(1).maybeSingle();
       if (tripData) setTrip(tripData);
 
@@ -82,6 +104,7 @@ const login = async () => {
 
       const { data: roundData } = await supabase.from("rounds").select("id, name, scorecard_key, sort_order").eq("trip_id", tripId).order("sort_order");
       setRounds(roundData ?? []);
+
       setLoading(false);
     };
 
@@ -95,11 +118,11 @@ const login = async () => {
 
       {/* Header */}
       <div style={{ background: GREEN, padding: "0 20px", paddingTop: 48, paddingBottom: 32, textAlign: "center" }}>
-       <img
-  src="https://kqtipluvrwczlorccmlb.supabase.co/storage/v1/object/public/assets/TBC%20Main.png"
-  alt="The Bob Classic"
-  style={{ width: 120, height: 120, objectFit: "contain", margin: "0 auto 16px", display: "block" }}
-/>
+        <img
+          src="https://kqtipluvrwczlorccmlb.supabase.co/storage/v1/object/public/assets/TBC%20Main.png"
+          alt="The Bob Classic"
+          style={{ width: 120, height: 120, objectFit: "contain", margin: "0 auto 16px", display: "block" }}
+        />
         <h1 style={{ color: WHITE, fontSize: 28, fontWeight: "bold", margin: 0, letterSpacing: 1 }}>The Bob Classic</h1>
         <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 14, marginTop: 6 }}>2026 · French Lick, IN</p>
       </div>
@@ -108,26 +131,45 @@ const login = async () => {
 
         {loading && <p style={{ textAlign: "center", color: GRAY }}>Loading...</p>}
 
+        {/* Login Screen */}
         {!loading && !sessionEmail && (
           <div style={{ background: WHITE, borderRadius: 16, padding: 24, textAlign: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>🏌️</div>
             <h2 style={{ fontSize: 20, fontWeight: "bold", marginBottom: 8, color: "#111" }}>Welcome</h2>
             <p style={{ color: GRAY, marginBottom: 24, fontSize: 14 }}>Sign in to access your scorecard and leaderboard.</p>
             <input
-  type="email"
-  placeholder="Enter your email"
-  value={loginEmail}
-  onChange={(e) => setLoginEmail(e.target.value)}
-  style={{ width: "100%", padding: "14px", fontSize: 16, borderRadius: 10, border: "1px solid #d1d5db", marginBottom: 12, boxSizing: "border-box" as const }}
-/>
-<button onClick={login} style={{ width: "100%", padding: "14px", fontSize: 16, fontWeight: "bold", borderRadius: 10, border: "none", background: GREEN, color: WHITE, cursor: "pointer" }}>
-  📧 Email me a login link
-</button>
+              type="email"
+              placeholder="Enter your email"
+              value={loginEmail}
+              onChange={(e) => setLoginEmail(e.target.value)}
+              style={{ width: "100%", padding: "14px", fontSize: 16, borderRadius: 10, border: "1px solid #d1d5db", marginBottom: 12, boxSizing: "border-box" as const }}
+            />
+            <button onClick={login} style={{ width: "100%", padding: "14px", fontSize: 16, fontWeight: "bold", borderRadius: 10, border: "none", background: GREEN, color: WHITE, cursor: "pointer" }}>
+              📧 Email me a login link
+            </button>
             {error && <p style={{ color: "red", marginTop: 12, fontSize: 13 }}>{error}</p>}
           </div>
         )}
 
-        {!loading && sessionEmail && (
+        {/* Who Are You Screen */}
+        {!loading && sessionEmail && needsPlayerLink && (
+          <div style={{ background: WHITE, borderRadius: 16, padding: 24, textAlign: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>👋</div>
+            <h2 style={{ fontSize: 20, fontWeight: "bold", marginBottom: 8, color: "#111" }}>Welcome!</h2>
+            <p style={{ color: GRAY, marginBottom: 24, fontSize: 14 }}>Who are you? Select your name to get started.</p>
+            <div style={{ display: "grid", gap: 10 }}>
+              {allPlayers.map((player) => (
+                <button key={player.id} onClick={() => linkPlayer(player.id)}
+                  style={{ width: "100%", padding: "14px", fontSize: 16, fontWeight: "bold", borderRadius: 10, border: `1px solid ${LIGHT_GREEN}`, background: LIGHT_GREEN, color: GREEN, cursor: "pointer" }}>
+                  {player.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Main App */}
+        {!loading && sessionEmail && !needsPlayerLink && (
           <div style={{ display: "grid", gap: 20 }}>
 
             {error && <div style={{ background: "#fee2e2", borderRadius: 10, padding: "12px 16px", color: "#991b1b", fontSize: 14 }}>{error}</div>}
