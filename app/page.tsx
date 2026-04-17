@@ -39,26 +39,31 @@ export default function Home() {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loginEmail, setLoginEmail] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
   const [needsPlayerLink, setNeedsPlayerLink] = useState(false);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
 
-  const login = async () => {
+  const sendOtp = async () => {
     setError(null);
-    if (!loginEmail) {
-      setError("Please enter your email.");
-      return;
-    }
+    if (!loginEmail) { setError("Please enter your email."); return; }
     const { error } = await supabase.auth.signInWithOtp({
       email: loginEmail,
-      options: {
-        emailRedirectTo: "https://bob-classic.vercel.app/auth/callback",
-      },
+      options: { shouldCreateUser: true },
     });
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    alert("Check your email for the login link.");
+    if (error) { setError(error.message); return; }
+    setOtpSent(true);
+  };
+
+  const verifyOtp = async () => {
+    setError(null);
+    if (!otpCode) { setError("Please enter the code."); return; }
+    const { error } = await supabase.auth.verifyOtp({
+      email: loginEmail,
+      token: otpCode,
+      type: "email",
+    });
+    if (error) { setError(error.message); return; }
   };
 
   const logout = async () => {
@@ -69,6 +74,8 @@ export default function Home() {
     setSessionEmail(null);
     setError(null);
     setNeedsPlayerLink(false);
+    setOtpSent(false);
+    setOtpCode("");
   };
 
   const linkPlayer = async (playerId: string) => {
@@ -85,10 +92,7 @@ export default function Home() {
       setError(null);
 
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setLoading(false);
-        return;
-      }
+      if (!session) { setLoading(false); return; }
       setSessionEmail(session.user.email ?? null);
 
       const { data: allP } = await supabase
@@ -103,11 +107,7 @@ export default function Home() {
         .limit(1)
         .maybeSingle();
 
-      if (meError) {
-        setError(meError.message);
-        setLoading(false);
-        return;
-      }
+      if (meError) { setError(meError.message); setLoading(false); return; }
 
       if (!meData || !meData.trip_id) {
         setNeedsPlayerLink(true);
@@ -143,12 +143,8 @@ export default function Home() {
     };
 
     run();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      run();
-    });
-    return () => {
-      subscription.unsubscribe();
-    };
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => { run(); });
+    return () => { subscription.unsubscribe(); };
   }, []);
 
   return (
@@ -174,17 +170,41 @@ export default function Home() {
           <div style={{ background: WHITE, borderRadius: 16, padding: 24, textAlign: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>🏌️</div>
             <h2 style={{ fontSize: 20, fontWeight: "bold", marginBottom: 8, color: "#111" }}>Welcome</h2>
-            <p style={{ color: GRAY, marginBottom: 24, fontSize: 14 }}>Sign in to access your scorecard and leaderboard.</p>
-            <input
-              type="email"
-              placeholder="Enter your email"
-              value={loginEmail}
-              onChange={(e) => setLoginEmail(e.target.value)}
-              style={{ width: "100%", padding: "14px", fontSize: 16, borderRadius: 10, border: "1px solid #d1d5db", marginBottom: 12, boxSizing: "border-box" as const }}
-            />
-            <button onClick={login} style={{ width: "100%", padding: "14px", fontSize: 16, fontWeight: "bold", borderRadius: 10, border: "none", background: GREEN, color: WHITE, cursor: "pointer" }}>
-              📧 Email me a login link
-            </button>
+            <p style={{ color: GRAY, marginBottom: 24, fontSize: 14 }}>
+              {otpSent ? "Enter the 6-digit code sent to your email." : "Sign in to access your scorecard and leaderboard."}
+            </p>
+
+            {!otpSent ? (
+              <>
+                <input
+                  type="email"
+                  placeholder="Enter your email"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  style={{ width: "100%", padding: "14px", fontSize: 16, borderRadius: 10, border: "1px solid #d1d5db", marginBottom: 12, boxSizing: "border-box" as const }}
+                />
+                <button onClick={sendOtp} style={{ width: "100%", padding: "14px", fontSize: 16, fontWeight: "bold", borderRadius: 10, border: "none", background: GREEN, color: WHITE, cursor: "pointer" }}>
+                  📧 Send me a code
+                </button>
+              </>
+            ) : (
+              <>
+                <input
+                  type="number"
+                  placeholder="Enter 6-digit code"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value)}
+                  style={{ width: "100%", padding: "14px", fontSize: 24, borderRadius: 10, border: "1px solid #d1d5db", marginBottom: 12, boxSizing: "border-box" as const, textAlign: "center", letterSpacing: 8 }}
+                />
+                <button onClick={verifyOtp} style={{ width: "100%", padding: "14px", fontSize: 16, fontWeight: "bold", borderRadius: 10, border: "none", background: GREEN, color: WHITE, cursor: "pointer" }}>
+                  ✓ Verify Code
+                </button>
+                <button onClick={() => { setOtpSent(false); setOtpCode(""); setError(null); }}
+                  style={{ width: "100%", padding: "10px", fontSize: 14, borderRadius: 10, border: "1px solid #d1d5db", background: WHITE, color: GRAY, cursor: "pointer", marginTop: 8 }}>
+                  ← Use a different email
+                </button>
+              </>
+            )}
             {error && <p style={{ color: "red", marginTop: 12, fontSize: 13 }}>{error}</p>}
           </div>
         )}
