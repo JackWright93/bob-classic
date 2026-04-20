@@ -1,157 +1,197 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 const GREEN = "#1a6b3c";
-const LIGHT_GREEN = "#e8f5ee";
+const DARK_GREEN = "#134d2b";
+const GOLD = "#c9a84c";
 const WHITE = "#ffffff";
-const GRAY = "#6b7280";
+const RED = "#cc0000";
+const BG = "#134d2b";
 
-type PlayerPoints = {
-  id: string;
-  name: string;
-  totalPoints: number;
-  roundSummary: { name: string; points: number }[];
+type RoundBreakdown = {
+  roundId: string;
+  roundName: string;
+  points: number;
+  details: string[];
+  grossTotal: number | null;
+  holesCompleted: number;
+  totalHoles: number;
 };
 
-function calcRelativeHandicap(handicap: number, lowest: number) {
-  return Math.max(0, Math.round(handicap - lowest));
+function calcRelativeHandicap(handicap: number, lowestHandicap: number) {
+  return Math.max(0, Math.round(handicap - lowestHandicap));
 }
 
-function getStrokesReceived(hcp: number, si: number | null) {
-  if (!si) return 0;
-  return Math.floor(hcp / 18) + (si <= (hcp % 18) ? 1 : 0);
+function getStrokesReceived(relativeHandicap: number, strokeIndex: number | null) {
+  if (!strokeIndex) return 0;
+  return Math.floor(relativeHandicap / 18) + (strokeIndex <= (relativeHandicap % 18) ? 1 : 0);
 }
 
-function LeaderboardInner() {
+function PlayerDetailInner() {
+  const params = useParams();
   const router = useRouter();
-  const [leaderboard, setLeaderboard] = useState<PlayerPoints[]>([]);
+  const playerId = params.player as string;
+
+  const [playerName, setPlayerName] = useState("");
+  const [totalPoints, setTotalPoints] = useState(0);
+  const [rounds, setRounds] = useState<RoundBreakdown[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
+    const run = async () => {
       const { data: players } = await supabase.from("players").select("id, name, base_handicap");
-      const { data: rounds } = await supabase.from("rounds").select("id, name, scorecard_key, sort_order").order("sort_order");
-      const { data: scores } = await supabase.from("hole_scores").select("hole_no, strokes, player_id, round_id");
-      const { data: holes } = await supabase.from("scorecard_holes").select("hole_no, par, stroke_index, scorecard_key");
+      const { data: roundsData } = await supabase.from("rounds").select("id, name, scorecard_key, sort_order").order("sort_order");
+      const { data: allScores } = await supabase.from("hole_scores").select("hole_no, strokes, player_id, round_id");
+      const { data: allHoles } = await supabase.from("scorecard_holes").select("hole_no, par, stroke_index, scorecard_key");
 
-      if (!players || !rounds || !scores || !holes) { setLoading(false); return; }
+      if (!players || !roundsData || !allScores || !allHoles) return;
 
-      const lowest = Math.min(...players.map(p => p.base_handicap ?? 0));
+      const player = players.find((p) => p.id === playerId);
+      if (!player) return;
+      setPlayerName(player.name);
 
-      const result: PlayerPoints[] = players.map(player => {
-        const hcp = calcRelativeHandicap(player.base_handicap ?? 0, lowest);
-        let total = 0;
-        const roundSummary: { name: string; points: number }[] = [];
+      const lowestHandicap = Math.min(...players.map((p) => p.base_handicap ?? 0));
+      const relativeHandicap = calcRelativeHandicap(player.base_handicap ?? 0, lowestHandicap);
+      const breakdowns: RoundBreakdown[] = [];
 
-        rounds.forEach(round => {
-          const isSC = round.scorecard_key === "Sand Creek Course::Par 3";
-          const roundHoles = holes.filter(h => h.scorecard_key === round.scorecard_key);
-          const playerScores = scores.filter(s => s.player_id === player.id && s.round_id === round.id);
-          if (playerScores.length === 0) return;
+      roundsData.forEach((round) => {
+        const isSandCreek = round.scorecard_key === "Sand Creek Course::Par 3";
+        const holes = allHoles.filter((h) => h.scorecard_key === round.scorecard_key);
+        const playerScores = allScores.filter((s) => s.player_id === playerId && s.round_id === round.id);
+        if (playerScores.length === 0) return;
 
-          let pts = 0;
+        let points = 0;
+        const details: string[] = [];
 
-          playerScores.forEach(score => {
-            const hole = roundHoles.find(h => h.hole_no === score.hole_no);
-            if (!hole) return;
-            if (isSC) {
-              if (score.strokes === hole.par - 1) pts += 1;
-            } else {
-              const sr = getStrokesReceived(hcp, hole.stroke_index);
-              const diff = (score.strokes - sr) - hole.par;
-              if (score.strokes === 1) pts += 5;
-              else if (diff <= -2) pts += 3;
-              else if (diff === -1) pts += 1;
-            }
-          });
-
-          if (isSC) {
-            const t = playerScores.reduce((s, x) => s + x.strokes, 0);
-            if (playerScores.length === 9 && t <= 27) pts += 1;
+        playerScores.forEach((score) => {
+          const hole = holes.find((h) => h.hole_no === score.hole_no);
+          if (!hole) return;
+          if (isSandCreek) {
+            if (score.strokes === hole.par - 1) { points += 1; details.push(`🐦 Birdie on hole ${score.hole_no} (+1)`); }
+          } else {
+            const strokesReceived = getStrokesReceived(relativeHandicap, hole.stroke_index);
+            const diff = (score.strokes - strokesReceived) - hole.par;
+            if (score.strokes === 1) { points += 5; details.push(`🎯 Hole-in-one on hole ${score.hole_no} (+5)`); }
+            else if (diff <= -2) { points += 3; details.push(`🦅 Net eagle on hole ${score.hole_no} (+3)`); }
+            else if (diff === -1) { points += 1; details.push(`🐦 Net birdie on hole ${score.hole_no} (+1)`); }
           }
-
-          // Low gross
-          const allTotals = players.map(p => {
-            const ps = scores.filter(s => s.player_id === p.id && s.round_id === round.id);
-            if (ps.length < roundHoles.length) return null;
-            return { id: p.id, total: ps.reduce((s, x) => s + x.strokes, 0) };
-          }).filter(Boolean) as { id: string; total: number }[];
-
-          if (allTotals.length >= 2) {
-            const sorted = [...allTotals].sort((a, b) => a.total - b.total);
-            const pm: Record<number, number> = { 0: 3, 1: 2, 2: 1 };
-            let i = 0;
-            while (i < sorted.length) {
-              let j = i;
-              while (j < sorted.length && sorted[j].total === sorted[i].total) j++;
-              const shared = Math.floor(
-                Array.from({ length: j - i }, (_, k) => pm[i + k] ?? 0).reduce((a, b) => a + b, 0) / (j - i)
-              );
-              if (shared > 0) {
-                for (let k = i; k < j; k++) {
-                  if (sorted[k].id === player.id) pts += shared;
-                }
-              }
-              i = j;
-            }
-          }
-
-          total += pts;
-          roundSummary.push({ name: round.name, points: pts });
         });
 
-        return { id: player.id, name: player.name, totalPoints: total, roundSummary };
+        if (isSandCreek) {
+          const total = playerScores.reduce((sum, s) => sum + s.strokes, 0);
+          if (playerScores.length === 9 && total <= 27) { points += 1; details.push(`⭐ Shot ${total} — 27 or under (+1)`); }
+        }
+
+        const allPlayerTotals = players.map((p) => {
+          const scores = allScores.filter((s) => s.player_id === p.id && s.round_id === round.id);
+          if (scores.length < holes.length) return null;
+          return { playerId: p.id, total: scores.reduce((sum, s) => sum + s.strokes, 0) };
+        }).filter(Boolean) as { playerId: string; total: number }[];
+
+        if (allPlayerTotals.length >= 2) {
+          const sorted = [...allPlayerTotals].sort((a, b) => a.total - b.total);
+          const pointsMap: Record<number, number> = { 0: 3, 1: 2, 2: 1 };
+          let i = 0;
+          while (i < sorted.length) {
+            let j = i;
+            while (j < sorted.length && sorted[j].total === sorted[i].total) j++;
+            const tiedCount = j - i;
+            const totalPts = Array.from({ length: tiedCount }, (_, k) => pointsMap[i + k] ?? 0);
+            const sharedPts = Math.floor(totalPts.reduce((a, b) => a + b, 0) / tiedCount);
+            if (sharedPts > 0) {
+              for (let k = i; k < j; k++) {
+                if (sorted[k].playerId === playerId) {
+                  const place = i === 0 ? "Low gross" : i === 1 ? "2nd low gross" : "3rd low gross";
+                  points += sharedPts;
+                  details.push(`🏌️ ${place} — ${sorted[k].total} strokes (+${sharedPts})`);
+                }
+              }
+            }
+            i = j;
+          }
+        }
+
+        breakdowns.push({
+          roundId: round.id, roundName: round.name, points, details,
+          grossTotal: playerScores.reduce((sum, s) => sum + s.strokes, 0),
+          holesCompleted: playerScores.length, totalHoles: holes.length,
+        });
       });
 
-      result.sort((a, b) => b.totalPoints - a.totalPoints);
-      setLeaderboard(result);
+      setRounds(breakdowns);
+      setTotalPoints(breakdowns.reduce((sum, r) => sum + r.points, 0));
       setLoading(false);
     };
-
-    load();
-
-    const channel = supabase.channel("lb")
-      .on("postgres_changes", { event: "*", schema: "public", table: "hole_scores" }, load)
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+    run();
+  }, [playerId]);
 
   return (
-    <main style={{ minHeight: "100vh", background: "#f5f7f5", fontFamily: "Arial, sans-serif" }}>
-      <div style={{ background: GREEN, padding: "16px 20px 24px", textAlign: "center", position: "relative" }}>
-        <button onClick={() => router.push("/")} style={{ position: "absolute", left: 20, top: 18, background: "none", border: "none", color: WHITE, fontSize: 20, cursor: "pointer" }}>←</button>
-        <h1 style={{ color: WHITE, fontSize: 22, fontWeight: "bold", margin: 0 }}>🏆 Leaderboard</h1>
-        <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, marginTop: 4 }}>Updates live as scores are entered</p>
+    <main style={{ minHeight: "100vh", background: BG, fontFamily: "Arial, sans-serif" }}>
+
+      {/* Header */}
+      <div style={{ background: `linear-gradient(160deg, ${DARK_GREEN} 0%, #1a5c32 100%)`, padding: "16px 20px 24px", position: "relative", borderBottom: `2px solid ${GOLD}44` }}>
+        <button onClick={() => router.push("/leaderboard")} style={{ background: "none", border: "none", color: GOLD, fontSize: 20, cursor: "pointer", padding: 0, position: "absolute", top: 18, left: 16 }}>←</button>
+
+        {!loading && (
+          <div style={{ textAlign: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 8 }}>
+              <div style={{ height: 1, width: 30, background: GOLD, opacity: 0.5 }} />
+              <span style={{ color: GOLD, fontSize: 11, fontWeight: 700, letterSpacing: 2 }}>PLAYER SCORECARD</span>
+              <div style={{ height: 1, width: 30, background: GOLD, opacity: 0.5 }} />
+            </div>
+            <div style={{ width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${GOLD}, #a8853a)`, margin: "0 auto 10px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 900, color: DARK_GREEN, boxShadow: `0 0 0 3px ${DARK_GREEN}, 0 0 0 5px ${GOLD}44` }}>
+              {playerName.charAt(0)}
+            </div>
+            <h1 style={{ color: WHITE, fontSize: 24, fontWeight: 900, margin: 0, letterSpacing: 2, textTransform: "uppercase" }}>{playerName}</h1>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 8, background: RED, borderRadius: 8, padding: "4px 16px" }}>
+              <span style={{ color: WHITE, fontSize: 28, fontWeight: 900 }}>{totalPoints}</span>
+              <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 700, letterSpacing: 1 }}>PTS</span>
+            </div>
+          </div>
+        )}
       </div>
 
-      <div style={{ maxWidth: 480, margin: "0 auto", padding: "20px 16px" }}>
-        {loading && <p style={{ textAlign: "center", color: GRAY }}>Loading...</p>}
+      <div style={{ maxWidth: 480, margin: "0 auto", padding: "16px" }}>
+        {loading && <p style={{ textAlign: "center", color: GOLD, padding: 40, letterSpacing: 1 }}>LOADING...</p>}
 
-        {!loading && leaderboard.map((player, index) => (
-          <div key={player.id} onClick={() => router.push(`/leaderboard/${player.id}`)}
-            style={{ background: index === 0 ? LIGHT_GREEN : WHITE, borderRadius: 14, padding: 16, marginBottom: 10, border: index === 0 ? `2px solid ${GREEN}` : "1px solid #e5e7eb", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 22 }}>{index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`}</span>
-                <span style={{ fontSize: 17, fontWeight: "bold", color: "#111" }}>{player.name}</span>
-              </div>
+        {!loading && rounds.length === 0 && (
+          <div style={{ background: `${DARK_GREEN}cc`, borderRadius: 14, padding: 24, textAlign: "center", color: GOLD, border: `1px solid ${GOLD}33`, letterSpacing: 1 }}>
+            NO SCORES ENTERED YET
+          </div>
+        )}
+
+        {!loading && rounds.map((round, index) => (
+          <div key={round.roundId} style={{ borderRadius: 16, overflow: "hidden", marginBottom: 12, boxShadow: "0 4px 20px rgba(0,0,0,0.3)", border: `1px solid ${GOLD}33` }}>
+
+            {/* Round header */}
+            <div style={{ background: round.points > 0 ? `linear-gradient(90deg, ${GREEN}, ${DARK_GREEN})` : DARK_GREEN, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${GOLD}33` }}>
               <div>
-                <span style={{ fontSize: 22, fontWeight: "bold", color: index === 0 ? GREEN : "#111" }}>{player.totalPoints}</span>
-                <span style={{ fontSize: 13, color: GRAY }}> pts</span>
+                <div style={{ fontSize: 15, fontWeight: 900, color: WHITE, letterSpacing: 1, textTransform: "uppercase" }}>{round.roundName}</div>
+                <div style={{ fontSize: 11, color: `${GOLD}99`, fontWeight: 700, letterSpacing: 0.5, marginTop: 2 }}>
+                  {round.holesCompleted}/{round.totalHoles} HOLES · GROSS: {round.grossTotal}
+                </div>
+              </div>
+              <div style={{ background: round.points > 0 ? RED : `${DARK_GREEN}`, border: `1px solid ${round.points > 0 ? RED : GOLD + "44"}`, borderRadius: 8, padding: "6px 14px", textAlign: "center" }}>
+                <div style={{ fontSize: 22, fontWeight: 900, color: WHITE }}>{round.points}</div>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", fontWeight: 700, letterSpacing: 1 }}>PTS</div>
               </div>
             </div>
-            {player.roundSummary.length > 0 && (
-              <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {player.roundSummary.map((r, i) => (
-                  <span key={i} style={{ fontSize: 12, background: r.points > 0 ? LIGHT_GREEN : "#f3f4f6", borderRadius: 6, padding: "3px 8px", color: r.points > 0 ? GREEN : GRAY, fontWeight: r.points > 0 ? "bold" : "normal" }}>
-                    {r.name}: {r.points}pts
-                  </span>
-                ))}
-              </div>
-            )}
+
+            {/* Details */}
+            <div style={{ background: `${DARK_GREEN}cc`, padding: "10px 16px" }}>
+              {round.details.length === 0 ? (
+                <p style={{ fontSize: 12, color: `${GOLD}66`, margin: 0, letterSpacing: 0.5, fontWeight: 700 }}>NO POINTS EARNED YET</p>
+              ) : (
+                <div style={{ display: "grid", gap: 6 }}>
+                  {round.details.map((d, i) => (
+                    <div key={i} style={{ fontSize: 13, color: WHITE, background: `${GREEN}44`, borderRadius: 8, padding: "7px 12px", borderLeft: `3px solid ${GOLD}`, fontWeight: 600 }}>{d}</div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -159,10 +199,10 @@ function LeaderboardInner() {
   );
 }
 
-export default function LeaderboardPage() {
+export default function PlayerDetailPage() {
   return (
-    <Suspense fallback={<p style={{ padding: 40 }}>Loading...</p>}>
-      <LeaderboardInner />
+    <Suspense fallback={<p style={{ padding: 40, color: "#c9a84c" }}>Loading...</p>}>
+      <PlayerDetailInner />
     </Suspense>
   );
 }
