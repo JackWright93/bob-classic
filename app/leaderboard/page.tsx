@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 const GREEN = "#1a6b3c";
-const BG = "#ffffff";
+const DARK_GREEN = "#134d2b";
 const GOLD = "#c9a84c";
 const WHITE = "#ffffff";
 const RED = "#cc0000";
-const BG = "#134d2b";
+const BG = "#ffffff";
 
 type PlayerPoints = {
   id: string;
@@ -143,10 +143,10 @@ function LeaderboardInner() {
 
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "16px" }}>
 
-        {loading && <p style={{ textAlign: "center", color: GOLD, padding: 40, letterSpacing: 1 }}>LOADING...</p>}
+        {loading && <p style={{ textAlign: "center", color: DARK_GREEN, padding: 40, letterSpacing: 1 }}>LOADING...</p>}
 
         {!loading && (
-          <div style={{ borderRadius: 16, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
+          <div style={{ borderRadius: 16, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.15)" }}>
 
             {/* Column headers */}
             <div style={{ background: DARK_GREEN, padding: "8px 16px", display: "flex", alignItems: "center", borderBottom: `1px solid ${GOLD}44` }}>
@@ -162,8 +162,6 @@ function LeaderboardInner() {
               return (
                 <div key={player.id} onClick={() => router.push(`/leaderboard/${player.id}`)}
                   style={{ cursor: "pointer", borderBottom: `1px solid ${GOLD}22` }}>
-
-                  {/* Main row */}
                   <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", background: isFirst ? `linear-gradient(90deg, ${GREEN}cc, ${DARK_GREEN}cc)` : `${DARK_GREEN}99` }}>
                     <div style={{ width: 36, fontSize: isFirst ? 20 : 14, fontWeight: 900, color: isFirst ? GOLD : `${GOLD}88`, textAlign: "center" }}>
                       {medal ?? `${index + 1}`}
@@ -181,7 +179,7 @@ function LeaderboardInner() {
                       )}
                     </div>
                     <div style={{ width: 60, textAlign: "center" }}>
-                      <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: player.totalPoints > 0 ? RED : `${DARK_GREEN}`, border: `1px solid ${player.totalPoints > 0 ? RED : GOLD + "44"}`, borderRadius: 6, minWidth: 44, padding: "4px 8px" }}>
+                      <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: player.totalPoints > 0 ? RED : DARK_GREEN, border: `1px solid ${player.totalPoints > 0 ? RED : GOLD + "44"}`, borderRadius: 6, minWidth: 44, padding: "4px 8px" }}>
                         <span style={{ fontSize: 20, fontWeight: 900, color: WHITE }}>{player.totalPoints}</span>
                       </div>
                     </div>
