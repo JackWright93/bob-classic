@@ -18,6 +18,7 @@ const DARK_GREEN = "#134d2b";
 const GOLD = "#c9a84c";
 const WHITE = "#ffffff";
 const GRAY = "#9ca3af";
+const RED = "#cc0000";
 const BG = "#134d2b";
 const LIGHT_GREEN = "#e8f5ee";
 
@@ -214,7 +215,6 @@ function RoundPageInner() {
       </div>
 
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "16px" }}>
-
         {loading && <p style={{ textAlign: "center", color: GOLD, padding: 40 }}>Loading...</p>}
         {error && <p style={{ color: "#ef4444" }}>{error}</p>}
 
@@ -258,8 +258,6 @@ function RoundPageInner() {
 
                     return (
                       <div key={hole.hole_no} style={{ background: WHITE, borderRadius: 14, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.15)", border: label ? `2px solid ${label.border}` : `2px solid ${GOLD}44` }}>
-
-                        {/* Hole header — gold background */}
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: label && label.bg !== "#e8f5ee" ? label.bg : GOLD }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                             <div style={{ width: 32, height: 32, borderRadius: 8, background: DARK_GREEN, display: "flex", alignItems: "center", justifyContent: "center", color: GOLD, fontSize: 14, fontWeight: 900 }}>
@@ -277,7 +275,6 @@ function RoundPageInner() {
                           )}
                         </div>
 
-                        {/* Score controls */}
                         <div style={{ padding: "12px 14px", background: WHITE }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
                             <button onClick={() => updateScore(hole.hole_no, (strokes ?? hole.par) - 1)}
@@ -329,22 +326,21 @@ function RoundPageInner() {
                         .reduce((sum, h) => sum + h.par, 0);
                       const diff = entry.holesPlayed > 0 ? entry.bestBallTotal - parTotal : null;
                       const diffStr = diff === null ? "—" : diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`;
-                      const diffColor = diff === null ? GOLD : diff < 0 ? "#4ade80" : diff > 0 ? "#f87171" : GOLD;
                       const isLeading = index === 0 && entry.holesPlayed > 0;
                       return (
-                        <div key={entry.team.id} style={{ background: WHITE, borderRadius: 14, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.2)", border: isLeading ? `2px solid ${GOLD}` : `2px solid ${GOLD}33` }}>
-                          <div style={{ background: isLeading ? `linear-gradient(135deg, ${GOLD}, #a8853a)` : `${DARK_GREEN}dd`, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div key={entry.team.id} style={{ background: WHITE, borderRadius: 14, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.15)", border: isLeading ? `2px solid ${GOLD}` : "2px solid #e5e7eb" }}>
+                          <div style={{ background: isLeading ? `linear-gradient(90deg, ${GREEN}cc, ${DARK_GREEN}cc)` : DARK_GREEN, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                               <span style={{ fontSize: 20 }}>{index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉"}</span>
-                              <span style={{ fontWeight: 900, fontSize: 16, color: isLeading ? DARK_GREEN : WHITE }}>{entry.team.name}</span>
+                              <span style={{ fontWeight: 900, fontSize: 16, color: WHITE, textTransform: "uppercase", letterSpacing: 0.5 }}>{entry.team.name}</span>
                             </div>
-                            <div style={{ textAlign: "right" }}>
-                              <div style={{ fontSize: 26, fontWeight: 900, color: isLeading ? DARK_GREEN : diffColor }}>{diffStr}</div>
-                              <div style={{ fontSize: 11, color: isLeading ? `${DARK_GREEN}99` : `${GOLD}99`, fontWeight: 700, letterSpacing: 0.5 }}>{entry.holesPlayed} HOLES</div>
+                            <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: diff !== null && diff < 0 ? RED : DARK_GREEN, border: `1px solid ${diff !== null && diff < 0 ? RED : GOLD + "44"}`, borderRadius: 6, minWidth: 44, padding: "4px 10px" }}>
+                              <span style={{ fontSize: 20, fontWeight: 900, color: WHITE }}>{diffStr}</span>
                             </div>
                           </div>
-                          <div style={{ padding: "8px 16px", fontSize: 13, color: GRAY, fontWeight: 600, background: WHITE }}>
-                            {entry.members.map((m) => m.name).join(" · ")}
+                          <div style={{ padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontSize: 13, color: GRAY, fontWeight: 600 }}>{entry.members.map((m) => m.name).join(" · ")}</span>
+                            <span style={{ fontSize: 11, color: GRAY, fontWeight: 700, letterSpacing: 0.5 }}>{entry.holesPlayed} HOLES</span>
                           </div>
                         </div>
                       );
@@ -363,18 +359,20 @@ function RoundPageInner() {
                 ) : (
                   <div style={{ display: "grid", gap: 8 }}>
                     {individualLeaderboard.map((entry, index) => (
-                      <div key={entry.player.id} style={{ background: WHITE, borderRadius: 14, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.15)", border: index === 0 ? `2px solid ${GOLD}` : index < 3 ? `2px solid ${GREEN}` : `2px solid ${GOLD}22` }}>
-                        <div style={{ background: index === 0 ? `linear-gradient(135deg, ${GOLD}, #a8853a)` : index < 3 ? `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})` : `${DARK_GREEN}cc`, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div key={entry.player.id} style={{ background: WHITE, borderRadius: 14, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.15)", border: index === 0 ? `2px solid ${GOLD}` : index < 3 ? `2px solid ${GREEN}` : "2px solid #e5e7eb" }}>
+                        <div style={{ background: index === 0 ? `linear-gradient(90deg, ${GREEN}cc, ${DARK_GREEN}cc)` : index < 3 ? `linear-gradient(90deg, ${GREEN}99, ${DARK_GREEN}99)` : DARK_GREEN, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                             <span style={{ fontSize: 20 }}>{index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`}</span>
                             <div>
-                              <div style={{ fontWeight: 900, fontSize: 15, color: index < 3 ? (index === 0 ? DARK_GREEN : WHITE) : GOLD }}>{entry.player.name}</div>
-                              <div style={{ fontSize: 11, color: index < 3 ? (index === 0 ? `${DARK_GREEN}88` : "rgba(255,255,255,0.6)") : `${GOLD}88`, fontWeight: 700, letterSpacing: 0.5 }}>{entry.holesPlayed}/{holes.length} HOLES</div>
+                              <div style={{ fontWeight: 900, fontSize: 15, color: WHITE, textTransform: "uppercase", letterSpacing: 0.5 }}>{entry.player.name}</div>
+                              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", fontWeight: 700, letterSpacing: 0.5 }}>{entry.holesPlayed}/{holes.length} HOLES</div>
                             </div>
                           </div>
-                          <div style={{ textAlign: "right" }}>
-                            <div style={{ fontSize: 26, fontWeight: 900, color: index < 3 ? (index === 0 ? DARK_GREEN : WHITE) : GOLD }}>{entry.total}</div>
-                            {index < 3 && <div style={{ fontSize: 11, fontWeight: 900, color: index === 0 ? `${DARK_GREEN}99` : "rgba(255,255,255,0.7)", letterSpacing: 0.5 }}>{index === 0 ? "+3 PTS" : index === 1 ? "+2 PTS" : "+1 PT"}</div>}
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                            <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: RED, borderRadius: 6, minWidth: 44, padding: "4px 10px" }}>
+                              <span style={{ fontSize: 20, fontWeight: 900, color: WHITE }}>{entry.total}</span>
+                            </div>
+                            {index < 3 && <span style={{ fontSize: 10, fontWeight: 900, color: GOLD, letterSpacing: 0.5 }}>{index === 0 ? "+3 PTS" : index === 1 ? "+2 PTS" : "+1 PT"}</span>}
                           </div>
                         </div>
                       </div>
