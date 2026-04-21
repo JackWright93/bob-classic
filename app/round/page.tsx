@@ -19,7 +19,7 @@ const GOLD = "#c9a84c";
 const WHITE = "#ffffff";
 const GRAY = "#9ca3af";
 const RED = "#cc0000";
-const BG = "#134d2b";
+const BG = "#ffffff";
 const LIGHT_GREEN = "#e8f5ee";
 
 function calcRelativeHandicap(handicap: number, lowestHandicap: number) {
