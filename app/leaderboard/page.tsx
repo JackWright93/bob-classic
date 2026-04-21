@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 const GREEN = "#1a6b3c";
-const DARK_GREEN = "#134d2b";
+const DARK_GREEN = "#ffffff";
 const GOLD = "#c9a84c";
 const WHITE = "#ffffff";
 const RED = "#cc0000";
