@@ -210,23 +210,27 @@ export default function Home() {
 
             {/* Nav Buttons */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <button onClick={() => router.push("/leaderboard")}
-                style={{ padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, ${GOLD}, #a8853a)`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(201,168,76,0.4)", letterSpacing: 0.5 }}>
-                🏆<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>LEADERBOARD</span>
-              </button>
-              <button onClick={() => router.push("/history")}
-                style={{ padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(26,107,60,0.4)", letterSpacing: 0.5 }}>
-                🏅<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>HALL OF CHAMPIONS</span>
-              </button>
-              <button onClick={() => router.push("/admin")}
-                style={{ padding: "18px 12px", borderRadius: 16, border: "2px solid #e5e7eb", background: WHITE, color: "#111", cursor: "pointer", fontSize: 13, fontWeight: 700, textAlign: "center", letterSpacing: 0.5 }}>
-                ⚙️<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>ADMIN</span>
-              </button>
-              <button onClick={logout}
-                style={{ padding: "18px 12px", borderRadius: 16, border: "2px solid #e5e7eb", background: WHITE, color: "#111", cursor: "pointer", fontSize: 13, fontWeight: 700, textAlign: "center", letterSpacing: 0.5 }}>
-                👋<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>LOG OUT</span>
-              </button>
-            </div>
+  <button onClick={() => router.push("/leaderboard")}
+    style={{ padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, ${GOLD}, #a8853a)`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(201,168,76,0.4)", letterSpacing: 0.5 }}>
+    🏆<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>LEADERBOARD</span>
+  </button>
+  <button onClick={() => router.push("/feed")}
+    style={{ padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, #7c3aed, #5b21b6)`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(124,58,237,0.4)", letterSpacing: 0.5 }}>
+    ⚡<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>LIVE FEED</span>
+  </button>
+  <button onClick={() => router.push("/history")}
+    style={{ padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(26,107,60,0.4)", letterSpacing: 0.5 }}>
+    🏅<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>HALL OF CHAMPIONS</span>
+  </button>
+  <button onClick={() => router.push("/admin")}
+    style={{ padding: "18px 12px", borderRadius: 16, border: "2px solid #e5e7eb", background: WHITE, color: "#111", cursor: "pointer", fontSize: 13, fontWeight: 700, textAlign: "center", letterSpacing: 0.5 }}>
+    ⚙️<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>ADMIN</span>
+  </button>
+  <button onClick={logout}
+    style={{ padding: "18px 12px", borderRadius: 16, border: "2px solid #e5e7eb", background: WHITE, color: "#111", cursor: "pointer", fontSize: 13, fontWeight: 700, textAlign: "center", letterSpacing: 0.5 }}>
+    👋<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>LOG OUT</span>
+  </button>
+</div>
 
             {/* Rounds */}
             <div style={{ background: WHITE, borderRadius: 20, overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
