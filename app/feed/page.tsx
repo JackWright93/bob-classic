@@ -161,7 +161,8 @@ function FeedInner() {
 
   const getInitial = (name: string) => name.charAt(0).toUpperCase();
 
-  const isAutoPost = (post: Post) => post.post_type === "auto";
+  const isAutoPost = (post: Post) => post.post_type === "auto" || post.post_type === "roundup";
+  const isRoundup = (post: Post) => post.post_type === "roundup";
 
   return (
     <main style={{ minHeight: "100vh", background: BG, fontFamily: "Arial, sans-serif" }}>
@@ -212,14 +213,17 @@ function FeedInner() {
           const postReplies = replies.filter(r => r.post_id === post.id);
           const showReplies = expandedReplies.includes(post.id);
           const isOwn = post.player_id === playerId;
+          const roundup = isRoundup(post);
 
           return (
             <div key={post.id} style={{ background: WHITE, borderRadius: 16, marginBottom: 12, boxShadow: "0 2px 12px rgba(0,0,0,0.08)", overflow: "hidden", border: isAutoPost(post) ? `2px solid ${GOLD}44` : "2px solid transparent" }}>
 
-              {/* Auto post banner */}
+              {/* Auto post / roundup banner */}
               {isAutoPost(post) && (
                 <div style={{ background: `linear-gradient(90deg, ${GOLD}, #a8853a)`, padding: "4px 14px" }}>
-                  <span style={{ fontSize: 11, fontWeight: 900, color: DARK_GREEN, letterSpacing: 1 }}>⚡ AUTOMATIC UPDATE</span>
+                  <span style={{ fontSize: 11, fontWeight: 900, color: DARK_GREEN, letterSpacing: 1 }}>
+                    {roundup ? "🏆 ROUND ROUNDUP" : "⚡ AUTOMATIC UPDATE"}
+                  </span>
                 </div>
               )}
 
@@ -247,7 +251,7 @@ function FeedInner() {
 
               {/* Content */}
               {post.content && (
-                <div style={{ padding: "8px 14px 10px", fontSize: 15, color: "#111", lineHeight: 1.5 }}>{post.content}</div>
+                <div style={{ padding: "8px 14px 10px", fontSize: 15, color: "#111", lineHeight: 1.5, whiteSpace: roundup ? "pre-line" as const : "normal" as const, fontWeight: roundup ? 600 : 400 }}>{post.content}</div>
               )}
 
               {/* Actions */}

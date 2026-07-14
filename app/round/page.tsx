@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -31,6 +31,24 @@ function getStrokesReceived(relativeHandicap: number, strokeIndex: number | null
   return Math.floor(relativeHandicap / 18) + (strokeIndex <= (relativeHandicap % 18) ? 1 : 0);
 }
 
+type Achievement = "hole_in_one" | "eagle" | "birdie" | null;
+
+function getAchievement(strokes: number | null, par: number, strokeIndex: number | null, relativeHandicap: number, sandCreek: boolean): Achievement {
+  if (strokes === null) return null;
+  if (strokes === 1) return "hole_in_one";
+  if (sandCreek) {
+    const diff = strokes - par;
+    if (diff <= -2) return "eagle";
+    if (diff === -1) return "birdie";
+    return null;
+  }
+  const strokesReceived = getStrokesReceived(relativeHandicap, strokeIndex);
+  const diff = (strokes - strokesReceived) - par;
+  if (diff <= -2) return "eagle";
+  if (diff === -1) return "birdie";
+  return null;
+}
+
 function RoundPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -41,6 +59,8 @@ function RoundPageInner() {
   const [roundName, setRoundName] = useState("");
   const [scorecardKey, setScorecardKey] = useState("");
   const [playerId, setPlayerId] = useState<string | null>(null);
+  const [tripId, setTripId] = useState<string | null>(null);
+  const [playerName, setPlayerName] = useState<string | null>(null);
   const [holes, setHoles] = useState<Hole[]>([]);
   const [scores, setScores] = useState<HoleScore[]>([]);
   const [saving, setSaving] = useState<number | null>(null);
@@ -67,9 +87,11 @@ function RoundPageInner() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push("/"); return; }
 
-      const { data: playerData } = await supabase.from("players").select("id, base_handicap").eq("auth_user_id", session.user.id).maybeSingle();
+      const { data: playerData } = await supabase.from("players").select("id, base_handicap, trip_id, name").eq("auth_user_id", session.user.id).maybeSingle();
       if (!playerData) { setError("Player not found."); setLoading(false); return; }
       setPlayerId(playerData.id);
+      setTripId(playerData.trip_id);
+      setPlayerName(playerData.name);
 
       const { data: roundData } = await supabase.from("rounds").select("name, scorecard_key").eq("id", roundId).maybeSingle();
       if (!roundData) { setError("Round not found."); setLoading(false); return; }
@@ -116,6 +138,9 @@ function RoundPageInner() {
 
   const updateScore = async (holeNo: number, newStrokes: number) => {
     if (!playerId || !roundId || newStrokes < 1) return;
+    const hole = holes.find((h) => h.hole_no === holeNo);
+    const prevStrokes = scores.find((s) => s.hole_no === holeNo)?.strokes ?? null;
+
     setScores((prev) => prev.map((s) => s.hole_no === holeNo ? { ...s, strokes: newStrokes } : s));
     setSaving(holeNo);
     await supabase.from("hole_scores").upsert(
@@ -124,6 +149,27 @@ function RoundPageInner() {
     );
     setSaving(null);
     loadAllScores();
+
+    // Auto-post to the live feed when a score newly becomes a birdie, eagle, or hole-in-one.
+    // "Newly" means the previous value for this hole didn't already qualify, so tapping
+    // +/- around within the same category (or re-saving) doesn't spam duplicate posts.
+    if (hole && tripId && playerName) {
+      const prevAchievement = getAchievement(prevStrokes, hole.par, hole.stroke_index, relativeHandicap, isSandCreek);
+      const newAchievement = getAchievement(newStrokes, hole.par, hole.stroke_index, relativeHandicap, isSandCreek);
+      if (newAchievement && newAchievement !== prevAchievement) {
+        const achievementText =
+          newAchievement === "hole_in_one" ? "a HOLE-IN-ONE 🎯" :
+          newAchievement === "eagle" ? "an EAGLE 🦅" :
+          "a BIRDIE 🐦";
+        const scoringNote = isSandCreek || newAchievement === "hole_in_one" ? "" : " (net)";
+        await supabase.from("posts").insert({
+          player_id: playerId,
+          trip_id: tripId,
+          content: `${playerName} made ${achievementText}${scoringNote} on Hole ${holeNo}! ⛳`,
+          post_type: "auto",
+        });
+      }
+    }
   };
 
   const clearScore = async (holeNo: number) => {
@@ -144,7 +190,18 @@ function RoundPageInner() {
     const others = specialAwards.filter((a) => a.hole_no === holeNo && a.type === type);
     for (const o of others) await supabase.from("special_awards").delete().eq("id", o.id);
     const { data } = await supabase.from("special_awards").insert({ round_id: roundId, hole_no: holeNo, player_id: playerId, type, confirmed: false }).select().single();
-    if (data) setSpecialAwards((prev) => [...prev.filter((a) => !(a.hole_no === holeNo && a.type === type)), data]);
+    if (data) {
+      setSpecialAwards((prev) => [...prev.filter((a) => !(a.hole_no === holeNo && a.type === type)), data]);
+      if (tripId && playerName) {
+        const awardText = type === "longest_drive" ? "🚗 LONGEST DRIVE" : "📍 CLOSEST TO PIN";
+        await supabase.from("posts").insert({
+          player_id: playerId,
+          trip_id: tripId,
+          content: `${playerName} claimed ${awardText} on Hole ${holeNo}! ⛳`,
+          post_type: "auto",
+        });
+      }
+    }
   };
 
   const getScoreLabel = (strokes: number | null, par: number, strokeIndex: number | null, handicap: number) => {
@@ -193,6 +250,84 @@ function RoundPageInner() {
       return { player, total, holesPlayed: playerScores.length };
     }).filter((p) => p.holesPlayed > 0).sort((a, b) => a.total - b.total);
   };
+
+  const postRoundup = async () => {
+    if (!tripId || !playerId) return;
+    const medal = (i: number) => (i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉");
+
+    const teamLb = getTeamLeaderboard().filter((e) => e.holesPlayed > 0).slice(0, 3);
+    const indivLb = getIndividualRoundLeaderboard().slice(0, 3);
+    const ldAward = specialAwards.find((a) => a.type === "longest_drive");
+    const ctpAward = specialAwards.find((a) => a.type === "closest_to_pin");
+    const ldPlayer = ldAward ? players.find((p) => p.id === ldAward.player_id)?.name : null;
+    const ctpPlayer = ctpAward ? players.find((p) => p.id === ctpAward.player_id)?.name : null;
+
+    const lines: string[] = [`🏆 ${roundName.toUpperCase()} ROUNDUP 🏆`];
+
+    if (teamLb.length > 0) {
+      lines.push("", "TEAM STANDINGS (Net Best Ball):");
+      teamLb.forEach((entry, i) => {
+        const parTotal = holes
+          .filter((h) => allScores.some((s) => entry.members.some((m) => s.player_id === m.id && s.hole_no === h.hole_no)))
+          .reduce((sum, h) => sum + h.par, 0);
+        const diff = entry.bestBallTotal - parTotal;
+        const diffStr = diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`;
+        lines.push(`${medal(i)} ${entry.team.name} — ${diffStr}`);
+      });
+    }
+
+    if (indivLb.length > 0) {
+      lines.push("", "TOP INDIVIDUAL SCORES (Gross):");
+      indivLb.forEach((entry, i) => {
+        lines.push(`${medal(i)} ${entry.player.name} — ${entry.total}`);
+      });
+    }
+
+    if (ldPlayer || ctpPlayer) {
+      lines.push("");
+      if (ldPlayer) lines.push(`🚗 Longest Drive: ${ldPlayer}`);
+      if (ctpPlayer) lines.push(`📍 Closest to Pin: ${ctpPlayer}`);
+    }
+
+    await supabase.from("posts").insert({
+      player_id: playerId,
+      trip_id: tripId,
+      content: lines.join("\n"),
+      post_type: "roundup",
+    });
+  };
+
+  const roundupCheckedRef = useRef(false);
+
+  useEffect(() => {
+    if (isSandCreek) return; // Sand Creek is excluded from roundups per trip rules
+    if (roundupCheckedRef.current) return;
+    if (!roundId || !tripId || !playerId || holes.length === 0 || players.length === 0) return;
+
+    const participantIds = teams.length > 0
+      ? Array.from(new Set(teamPlayers.map((tp) => tp.player_id)))
+      : players.map((p) => p.id);
+    if (participantIds.length === 0) return;
+
+    const allComplete = participantIds.every((pid) => allScores.filter((s) => s.player_id === pid).length === holes.length);
+    if (!allComplete) return;
+
+    roundupCheckedRef.current = true;
+
+    (async () => {
+      // Guard against duplicate roundups if multiple devices finish around the same time
+      const marker = `${roundName.toUpperCase()} ROUNDUP`;
+      const { data: existing } = await supabase
+        .from("posts")
+        .select("id")
+        .eq("trip_id", tripId)
+        .eq("post_type", "roundup")
+        .ilike("content", `%${marker}%`)
+        .limit(1);
+      if (existing && existing.length > 0) return;
+      await postRoundup();
+    })();
+  }, [allScores, teams, teamPlayers, players, holes, roundId, tripId, playerId, isSandCreek, roundName]);
 
   const totalStrokes = scores.reduce((sum, s) => sum + (s.strokes ?? 0), 0);
   const holesCompleted = scores.filter((s) => s.strokes !== null).length;
