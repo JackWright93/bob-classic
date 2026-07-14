@@ -49,6 +49,8 @@ function FeedInner() {
   const [expandedReplies, setExpandedReplies] = useState<string[]>([]);
   const [replyText, setReplyText] = useState<Record<string, string>>({});
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
+  const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadFeed = async () => {
@@ -93,10 +95,24 @@ function FeedInner() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const submitPost = async (photoUrl?: string) => {
+  const submitPost = async () => {
     if (!playerId || !tripId) return;
-    if (!newPost.trim() && !photoUrl) return;
+    if (!newPost.trim() && !pendingPhotoFile) return;
     setPosting(true);
+
+    let photoUrl: string | undefined;
+    if (pendingPhotoFile) {
+      setUploadingPhoto(true);
+      const fileName = `${playerId}-${Date.now()}.${pendingPhotoFile.name.split(".").pop()}`;
+      const { data, error } = await supabase.storage.from("post-photos").upload(fileName, pendingPhotoFile);
+      setUploadingPhoto(false);
+      if (error || !data) {
+        setPosting(false);
+        return;
+      }
+      const { data: urlData } = supabase.storage.from("post-photos").getPublicUrl(fileName);
+      photoUrl = urlData.publicUrl;
+    }
 
     await supabase.from("posts").insert({
       player_id: playerId,
@@ -107,22 +123,24 @@ function FeedInner() {
     });
 
     setNewPost("");
+    clearPendingPhoto();
     setPosting(false);
   };
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const clearPendingPhoto = () => {
+    if (pendingPhotoPreview) URL.revokeObjectURL(pendingPhotoPreview);
+    setPendingPhotoFile(null);
+    setPendingPhotoPreview(null);
+  };
+
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !playerId) return;
-    setUploadingPhoto(true);
-
-    const fileName = `${playerId}-${Date.now()}.${file.name.split(".").pop()}`;
-    const { data, error } = await supabase.storage.from("post-photos").upload(fileName, file);
-
-    if (!error && data) {
-      const { data: urlData } = supabase.storage.from("post-photos").getPublicUrl(fileName);
-      await submitPost(urlData.publicUrl);
-    }
-    setUploadingPhoto(false);
+    if (!file) return;
+    if (pendingPhotoPreview) URL.revokeObjectURL(pendingPhotoPreview);
+    setPendingPhotoFile(file);
+    setPendingPhotoPreview(URL.createObjectURL(file));
+    // Reset the input so selecting the same file again still fires onChange
+    e.target.value = "";
   };
 
   const toggleLike = async (postId: string) => {
@@ -191,20 +209,28 @@ function FeedInner() {
             rows={2}
             style={{ width: "100%", padding: "10px 12px", fontSize: 15, borderRadius: 10, border: "2px solid #e5e7eb", resize: "none", fontFamily: "Arial", boxSizing: "border-box" as const, outline: "none", color: "#111111", WebkitTextFillColor: "#111111", colorScheme: "light" as const, background: WHITE }}
           />
+          {pendingPhotoPreview && (
+            <div style={{ position: "relative", marginTop: 10, borderRadius: 10, overflow: "hidden", border: "2px solid #e5e7eb" }}>
+              <img src={pendingPhotoPreview} alt="Selected" style={{ width: "100%", maxHeight: 220, objectFit: "cover", display: "block" }} />
+              <button onClick={clearPendingPhoto}
+                style={{ position: "absolute", top: 8, right: 8, width: 30, height: 30, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.6)", color: WHITE, cursor: "pointer", fontSize: 15, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <button onClick={() => fileInputRef.current?.click()}
               style={{ padding: "10px 14px", borderRadius: 10, border: `2px solid ${GOLD}`, background: "#fffbeb", color: DARK_GREEN, cursor: "pointer", fontSize: 13, fontWeight: 800 }}>
-              {uploadingPhoto ? "Uploading..." : "📷 Photo"}
+              {pendingPhotoFile ? "📷 Change Photo" : "📷 Photo"}
             </button>
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: "none" }} />
-            <button onClick={() => submitPost()} disabled={posting || !newPost.trim()}
-              style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: newPost.trim() ? `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})` : "#e5e7eb", color: newPost.trim() ? WHITE : GRAY, cursor: newPost.trim() ? "pointer" : "default", fontSize: 14, fontWeight: 900, letterSpacing: 0.5 }}>
-              {posting ? "POSTING..." : "POST"}
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoSelect} style={{ display: "none" }} />
+            <button onClick={() => submitPost()} disabled={posting || (!newPost.trim() && !pendingPhotoFile)}
+              style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: (newPost.trim() || pendingPhotoFile) ? `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})` : "#e5e7eb", color: (newPost.trim() || pendingPhotoFile) ? WHITE : GRAY, cursor: (newPost.trim() || pendingPhotoFile) ? "pointer" : "default", fontSize: 14, fontWeight: 900, letterSpacing: 0.5 }}>
+              {posting ? (uploadingPhoto ? "UPLOADING..." : "POSTING...") : "POST"}
             </button>
           </div>
         </div>
 
         {loading && <p style={{ textAlign: "center", color: GRAY, padding: 20 }}>Loading feed...</p>}
+
 
         {/* Posts */}
         {!loading && posts.map((post) => {
