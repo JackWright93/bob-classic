@@ -189,7 +189,7 @@ function FeedInner() {
             value={newPost}
             onChange={(e) => setNewPost(e.target.value)}
             rows={2}
-            style={{ width: "100%", padding: "10px 12px", fontSize: 15, borderRadius: 10, border: "2px solid #e5e7eb", resize: "none", fontFamily: "Arial", boxSizing: "border-box" as const, outline: "none" }}
+            style={{ width: "100%", padding: "10px 12px", fontSize: 15, borderRadius: 10, border: "2px solid #e5e7eb", resize: "none", fontFamily: "Arial", boxSizing: "border-box" as const, outline: "none", color: "#111111", WebkitTextFillColor: "#111111", colorScheme: "light" as const, background: WHITE }}
           />
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <button onClick={() => fileInputRef.current?.click()}
@@ -287,7 +287,7 @@ function FeedInner() {
                       placeholder="Write a reply..."
                       value={replyText[post.id] ?? ""}
                       onChange={(e) => setReplyText(prev => ({ ...prev, [post.id]: e.target.value }))}
-                      style={{ flex: 1, padding: "8px 12px", fontSize: 14, borderRadius: 10, border: "2px solid #e5e7eb", outline: "none", fontFamily: "Arial" }}
+                      style={{ flex: 1, padding: "8px 12px", fontSize: 14, borderRadius: 10, border: "2px solid #e5e7eb", outline: "none", fontFamily: "Arial", color: "#111111", WebkitTextFillColor: "#111111", colorScheme: "light" as const, background: WHITE }}
                     />
                     <button onClick={() => submitReply(post.id)}
                       style={{ padding: "8px 14px", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800 }}>
