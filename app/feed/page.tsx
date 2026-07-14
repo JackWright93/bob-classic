@@ -19,6 +19,7 @@ type Post = {
   post_type: string;
   created_at: string;
   player_name: string;
+  player_avatar: string | null;
 };
 
 type Like = {
@@ -34,6 +35,7 @@ type Reply = {
   content: string;
   created_at: string;
   player_name: string;
+  player_avatar: string | null;
 };
 
 function FeedInner() {
@@ -63,8 +65,9 @@ function FeedInner() {
     setPlayerId(playerData.id);
     setTripId(playerData.trip_id);
 
-    const { data: allPlayers } = await supabase.from("players").select("id, name");
+    const { data: allPlayers } = await supabase.from("players").select("id, name, avatar");
     const playerMap = Object.fromEntries((allPlayers ?? []).map(p => [p.id, p.name]));
+    const avatarMap = Object.fromEntries((allPlayers ?? []).map(p => [p.id, p.avatar as string | null]));
 
     const { data: postsData } = await supabase
       .from("posts")
@@ -72,13 +75,16 @@ function FeedInner() {
       .eq("trip_id", playerData.trip_id)
       .order("created_at", { ascending: false });
 
-    setPosts((postsData ?? []).map(p => ({ ...p, player_name: playerMap[p.player_id] ?? "Unknown" })));
+    setPosts((postsData ?? []).map(p => ({ ...p, player_name: playerMap[p.player_id] ?? "Unknown", player_avatar: avatarMap[p.player_id] ?? null })));
 
     const { data: likesData } = await supabase.from("post_likes").select("*");
     setLikes(likesData ?? []);
 
     const { data: repliesData } = await supabase.from("post_replies").select("*").order("created_at", { ascending: true });
-    setReplies((repliesData ?? []).map(r => ({ ...r, player_name: playerMap[r.player_id] ?? "Unknown" })));
+    setReplies((repliesData ?? []).map(r => ({ ...r, player_name: playerMap[r.player_id] ?? "Unknown", player_avatar: avatarMap[r.player_id] ?? null })));
+
+    // Mark the feed as read now, so the home page's unread badge clears for this visit
+    await supabase.from("players").update({ last_feed_view_at: new Date().toISOString() }).eq("id", playerData.id);
 
     setLoading(false);
   };
@@ -179,6 +185,26 @@ function FeedInner() {
 
   const getInitial = (name: string) => name.charAt(0).toUpperCase();
 
+  const renderAvatar = (avatar: string | null, name: string, size: number) => {
+    if (avatar && avatar.startsWith("http")) {
+      return (
+        <img src={avatar} alt={name} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: `2px solid ${GOLD}` }} />
+      );
+    }
+    if (avatar) {
+      return (
+        <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.55, flexShrink: 0 }}>
+          {avatar}
+        </div>
+      );
+    }
+    return (
+      <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})`, display: "flex", alignItems: "center", justifyContent: "center", color: WHITE, fontSize: size * 0.42, fontWeight: 900, flexShrink: 0 }}>
+        {getInitial(name)}
+      </div>
+    );
+  };
+
   const isAutoPost = (post: Post) => post.post_type === "auto" || post.post_type === "roundup";
   const isRoundup = (post: Post) => post.post_type === "roundup";
 
@@ -256,9 +282,7 @@ function FeedInner() {
               {/* Post header */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px 8px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 38, height: 38, borderRadius: "50%", background: `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})`, display: "flex", alignItems: "center", justifyContent: "center", color: WHITE, fontSize: 16, fontWeight: 900 }}>
-                    {getInitial(post.player_name)}
-                  </div>
+                  {renderAvatar(post.player_avatar, post.player_name, 38)}
                   <div>
                     <div style={{ fontWeight: 800, fontSize: 14, color: "#111", textTransform: "uppercase", letterSpacing: 0.5 }}>{post.player_name}</div>
                     <div style={{ fontSize: 11, color: GRAY }}>{formatTime(post.created_at)}</div>
@@ -297,9 +321,7 @@ function FeedInner() {
                 <div style={{ borderTop: "1px solid #f3f4f6", padding: "10px 14px", background: "#fafafa" }}>
                   {postReplies.map((reply) => (
                     <div key={reply.id} style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: "50%", background: `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})`, display: "flex", alignItems: "center", justifyContent: "center", color: WHITE, fontSize: 11, fontWeight: 900, flexShrink: 0 }}>
-                        {getInitial(reply.player_name)}
-                      </div>
+                      {renderAvatar(reply.player_avatar, reply.player_name, 28)}
                       <div style={{ background: WHITE, borderRadius: 10, padding: "6px 10px", flex: 1, border: "1px solid #e5e7eb" }}>
                         <div style={{ fontSize: 12, fontWeight: 800, color: DARK_GREEN, textTransform: "uppercase", letterSpacing: 0.5 }}>{reply.player_name}</div>
                         <div style={{ fontSize: 14, color: "#111", marginTop: 2 }}>{reply.content}</div>

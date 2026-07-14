@@ -28,6 +28,7 @@ export default function Home() {
   const [otpCode, setOtpCode] = useState("");
   const [needsPlayerLink, setNeedsPlayerLink] = useState(false);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+  const [unreadFeedCount, setUnreadFeedCount] = useState(0);
 
   const sendOtp = async () => {
     setError(null);
@@ -91,6 +92,17 @@ export default function Home() {
 
       const { data: roundData } = await supabase.from("rounds").select("id, name, scorecard_key, sort_order").eq("trip_id", tripId).order("sort_order");
       setRounds(roundData ?? []);
+
+      // Unread live feed count: posts from other players since this player last viewed the feed.
+      // A never-viewed feed (null) counts everything currently posted as unread.
+      const { count } = await supabase
+        .from("posts")
+        .select("id", { count: "exact", head: true })
+        .eq("trip_id", tripId)
+        .neq("player_id", meData.id)
+        .gt("created_at", meData.last_feed_view_at ?? "1970-01-01");
+      setUnreadFeedCount(count ?? 0);
+
       setLoading(false);
     };
 
@@ -215,12 +227,21 @@ export default function Home() {
     🏆<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>LEADERBOARD</span>
   </button>
   <button onClick={() => router.push("/feed")}
-    style={{ padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, #7c3aed, #5b21b6)`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(124,58,237,0.4)", letterSpacing: 0.5 }}>
+    style={{ position: "relative", padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, #7c3aed, #5b21b6)`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(124,58,237,0.4)", letterSpacing: 0.5 }}>
     ⚡<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>LIVE FEED</span>
+    {unreadFeedCount > 0 && (
+      <span style={{ position: "absolute", top: -6, right: -6, minWidth: 22, height: 22, borderRadius: 11, background: "#ff3b30", color: WHITE, fontSize: 11, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid " + WHITE, boxShadow: "0 2px 6px rgba(0,0,0,0.3)" }}>
+        {unreadFeedCount > 9 ? "9+" : unreadFeedCount}
+      </span>
+    )}
   </button>
   <button onClick={() => router.push("/history")}
     style={{ padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(26,107,60,0.4)", letterSpacing: 0.5 }}>
     🏅<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>HALL OF CHAMPIONS</span>
+  </button>
+  <button onClick={() => router.push("/profile")}
+    style={{ padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, #0891b2, #0e7490)`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(8,145,178,0.4)", letterSpacing: 0.5 }}>
+    🎨<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>MY AVATAR</span>
   </button>
   <button onClick={() => router.push("/admin")}
     style={{ padding: "18px 12px", borderRadius: 16, border: "2px solid #e5e7eb", background: WHITE, color: "#111", cursor: "pointer", fontSize: 13, fontWeight: 700, textAlign: "center", letterSpacing: 0.5 }}>
