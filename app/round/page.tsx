@@ -177,6 +177,29 @@ function RoundPageInner() {
         });
       }
     }
+
+    // Par Train: post once when a player reaches exactly 4 gross pars in a row.
+    // "Par" here is gross strokes == hole par, the standard golf meaning (not net).
+    if (hole && tripId && playerName && newStrokes === hole.par) {
+      const updatedSaved = { ...savedScores, [holeNo]: newStrokes };
+      let streak = 0;
+      let h = holeNo;
+      while (true) {
+        const streakHole = holes.find((x) => x.hole_no === h);
+        const streakStrokes = updatedSaved[h];
+        if (!streakHole || streakStrokes == null || streakStrokes !== streakHole.par) break;
+        streak++;
+        h--;
+      }
+      if (streak === 4) {
+        await supabase.from("posts").insert({
+          player_id: playerId,
+          trip_id: tripId,
+          content: `${playerName} is on a PAR TRAIN 🚂 — 4 pars in a row through Hole ${holeNo}!`,
+          post_type: "auto",
+        });
+      }
+    }
   };
 
   const clearScore = async (holeNo: number) => {
@@ -225,7 +248,7 @@ function RoundPageInner() {
     return { label: `+${diff}`, color: WHITE, bg: "#991b1b", border: "#991b1b" };
   };
 
-  const getTeamLeaderboard = () => {
+  const getTeamLeaderboard = (holesSubset: Hole[] = holes) => {
     if (!teams.length || !players.length) return [];
     const lowestHandicap = Math.min(...players.map((p) => p.base_handicap ?? 0));
     return teams.map((team) => {
@@ -233,7 +256,7 @@ function RoundPageInner() {
       const members = players.filter((p) => memberIds.includes(p.id));
       let bestBallTotal = 0;
       let holesPlayed = 0;
-      holes.forEach((hole) => {
+      holesSubset.forEach((hole) => {
         const netScores = members.map((member) => {
           const score = allScores.find((s) => s.player_id === member.id && s.hole_no === hole.hole_no);
           if (!score) return null;
@@ -336,6 +359,56 @@ function RoundPageInner() {
       await postRoundup();
     })();
   }, [allScores, teams, teamPlayers, players, holes, roundId, tripId, playerId, isSandCreek, roundName]);
+
+  // "At the turn": post each team's front-nine (holes 1-9) net best ball score once
+  // every member of that team has finished all 9. Only applies to rounds with a back
+  // nine (Sand Creek's 9-hole round has no "turn" to speak of).
+  const turnCheckedTeamsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!roundId || !tripId || !playerId) return;
+    const frontNine = holes.filter((h) => h.hole_no <= 9);
+    if (frontNine.length < 9 || holes.length <= 9) return;
+    if (teams.length === 0) return;
+
+    teams.forEach((team) => {
+      if (turnCheckedTeamsRef.current.has(team.id)) return;
+      const memberIds = teamPlayers.filter((tp) => tp.team_id === team.id).map((tp) => tp.player_id);
+      if (memberIds.length === 0) return;
+
+      const frontNineComplete = memberIds.every(
+        (pid) => allScores.filter((s) => s.player_id === pid && s.hole_no <= 9).length === 9
+      );
+      if (!frontNineComplete) return;
+
+      turnCheckedTeamsRef.current.add(team.id);
+
+      (async () => {
+        const marker = `${roundName}: ${team.name} is`;
+        const { data: existing } = await supabase
+          .from("posts")
+          .select("id")
+          .eq("trip_id", tripId)
+          .eq("post_type", "auto")
+          .ilike("content", `%${marker}%`)
+          .limit(1);
+        if (existing && existing.length > 0) return;
+
+        const [teamFrontNine] = getTeamLeaderboard(frontNine).filter((e) => e.team.id === team.id);
+        if (!teamFrontNine) return;
+        const parTotal = frontNine.reduce((sum, h) => sum + h.par, 0);
+        const diff = teamFrontNine.bestBallTotal - parTotal;
+        const diffStr = diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`;
+
+        await supabase.from("posts").insert({
+          player_id: playerId,
+          trip_id: tripId,
+          content: `⛳ ${marker} ${diffStr} at the turn!`,
+          post_type: "auto",
+        });
+      })();
+    });
+  }, [allScores, teams, teamPlayers, holes, roundId, tripId, playerId, roundName]);
 
   const totalStrokes = scores.reduce((sum, s) => sum + (s.strokes ?? 0), 0);
   const holesCompleted = scores.filter((s) => s.strokes !== null).length;
