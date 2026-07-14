@@ -11,7 +11,7 @@ const WHITE = "#ffffff";
 const GRAY = "#6b7280";
 const BG = "#f0f2f0";
 
-const EMOJI_OPTIONS = ["⛳", "🏌️", "🏆", "🍺", "🔥", "😎", "🐊", "🦅", "⚡", "🎯", "🍀", "😂"];
+const EMOJI_OPTIONS = ["⛳", "🏌️", "🏆", "🍺", "🔥", "😎", "🐊", "🦅", "🎯", "🍀", "🚩", "🥇"];
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -115,7 +115,7 @@ export default function ProfilePage() {
                 {renderPreview(88)}
               </div>
               <p style={{ fontSize: 16, fontWeight: 800, color: "#111", margin: 0 }}>{playerName}</p>
-              <p style={{ fontSize: 13, color: GRAY, marginTop: 4 }}>This is what shows up next to your posts in the Live Feed.</p>
+              <p style={{ fontSize: 13, color: GRAY, marginTop: 4 }}>This is what shows up next to your posts in the Social Feed.</p>
               {saving && <p style={{ fontSize: 12, color: GREEN, fontWeight: 700, marginTop: 10 }}>Saving...</p>}
               {error && <p style={{ fontSize: 12, color: "#ef4444", fontWeight: 700, marginTop: 10 }}>{error}</p>}
             </div>
