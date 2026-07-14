@@ -132,7 +132,7 @@ export default function Home() {
         <h1 style={{ color: WHITE, fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: 2, textTransform: "uppercase" }}>The Bob Classic</h1>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 6 }}>
           <div style={{ height: 1, width: 40, background: GOLD, opacity: 0.6 }} />
-          <p style={{ color: GOLD, fontSize: 13, margin: 0, letterSpacing: 1 }}>2026 · FRENCH LICK, IN</p>
+          <p style={{ color: GOLD, fontSize: 13, margin: 0, letterSpacing: 1 }}>2026 · 10-YEAR ANNIVERSARY</p>
           <div style={{ height: 1, width: 40, background: GOLD, opacity: 0.6 }} />
         </div>
       </div>
