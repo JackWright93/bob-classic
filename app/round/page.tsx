@@ -169,11 +169,10 @@ function RoundPageInner() {
           newAchievement === "hole_in_one" ? "a HOLE-IN-ONE 🎯" :
           newAchievement === "eagle" ? "an EAGLE 🦅" :
           "a BIRDIE 🐦";
-        const scoringNote = isSandCreek || newAchievement === "hole_in_one" ? "" : " (net)";
         await supabase.from("posts").insert({
           player_id: playerId,
           trip_id: tripId,
-          content: `${playerName} made ${achievementText}${scoringNote} on Hole ${holeNo}! ⛳`,
+          content: `${playerName} made ${achievementText} on Hole ${holeNo}! ⛳`,
           post_type: "auto",
         });
       }

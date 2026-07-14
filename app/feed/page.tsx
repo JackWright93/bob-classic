@@ -183,7 +183,7 @@ function FeedInner() {
   const isRoundup = (post: Post) => post.post_type === "roundup";
 
   return (
-    <main style={{ minHeight: "100vh", background: BG, fontFamily: "Arial, sans-serif" }}>
+    <main style={{ minHeight: "100vh", background: DARK_GREEN, fontFamily: "Arial, sans-serif" }}>
 
       {/* Header */}
       <div style={{ background: `linear-gradient(160deg, ${DARK_GREEN} 0%, #1a5c32 100%)`, padding: "16px 20px 20px", position: "relative", borderBottom: `2px solid ${GOLD}44` }}>
