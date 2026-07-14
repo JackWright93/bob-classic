@@ -49,6 +49,8 @@ function FeedInner() {
   const [newPost, setNewPost] = useState("");
   const [posting, setPosting] = useState(false);
   const [expandedReplies, setExpandedReplies] = useState<string[]>([]);
+  const [expandedLikes, setExpandedLikes] = useState<string[]>([]);
+  const [playerDirectory, setPlayerDirectory] = useState<Record<string, string>>({});
   const [replyText, setReplyText] = useState<Record<string, string>>({});
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
@@ -68,6 +70,7 @@ function FeedInner() {
     const { data: allPlayers } = await supabase.from("players").select("id, name, avatar");
     const playerMap = Object.fromEntries((allPlayers ?? []).map(p => [p.id, p.name]));
     const avatarMap = Object.fromEntries((allPlayers ?? []).map(p => [p.id, p.avatar as string | null]));
+    setPlayerDirectory(playerMap);
 
     const { data: postsData } = await supabase
       .from("posts")
@@ -305,16 +308,30 @@ function FeedInner() {
               )}
 
               {/* Actions */}
-              <div style={{ display: "flex", gap: 0, borderTop: "1px solid #f3f4f6", padding: "8px 14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 0, borderTop: "1px solid #f3f4f6", padding: "8px 14px" }}>
                 <button onClick={() => toggleLike(post.id)}
-                  style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", padding: "6px 12px 6px 0", fontSize: 14, color: isLiked ? "#ef4444" : GRAY, fontWeight: isLiked ? 800 : 600 }}>
-                  {isLiked ? "❤️" : "🤍"} {postLikes.length > 0 && postLikes.length}
+                  style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: "6px 6px 6px 0", fontSize: 14, color: isLiked ? "#ef4444" : GRAY, fontWeight: isLiked ? 800 : 600 }}>
+                  {isLiked ? "❤️" : "🤍"}
                 </button>
+                {postLikes.length > 0 && (
+                  <button onClick={() => setExpandedLikes(prev => prev.includes(post.id) ? prev.filter(id => id !== post.id) : [...prev, post.id])}
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: "6px 12px 6px 0", fontSize: 14, color: GRAY, fontWeight: 700, textDecoration: "underline", textDecorationColor: "#e5e7eb" }}>
+                    {postLikes.length} {postLikes.length === 1 ? "like" : "likes"}
+                  </button>
+                )}
                 <button onClick={() => setExpandedReplies(prev => prev.includes(post.id) ? prev.filter(id => id !== post.id) : [...prev, post.id])}
                   style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", padding: "6px 12px", fontSize: 14, color: GRAY, fontWeight: 600 }}>
                   💬 {postReplies.length > 0 && `${postReplies.length} ${postReplies.length === 1 ? "reply" : "replies"}`}
                 </button>
               </div>
+
+              {/* Liked by */}
+              {expandedLikes.includes(post.id) && postLikes.length > 0 && (
+                <div style={{ padding: "0 14px 10px", fontSize: 12, color: GRAY }}>
+                  <span style={{ fontWeight: 700 }}>Liked by </span>
+                  {postLikes.map((l) => playerDirectory[l.player_id] ?? "Unknown").join(", ")}
+                </div>
+              )}
 
               {/* Replies */}
               {showReplies && (

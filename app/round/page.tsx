@@ -195,7 +195,7 @@ function RoundPageInner() {
         await supabase.from("posts").insert({
           player_id: playerId,
           trip_id: tripId,
-          content: `${playerName} is on a PAR TRAIN 🚂 — 4 pars in a row through Hole ${holeNo}!`,
+          content: `${playerName} is on a PAR TRAIN 🚂 — 4 pars in a row!`,
           post_type: "auto",
         });
       }

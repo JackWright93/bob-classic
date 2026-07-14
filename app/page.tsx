@@ -93,14 +93,16 @@ export default function Home() {
       const { data: roundData } = await supabase.from("rounds").select("id, name, scorecard_key, sort_order").eq("trip_id", tripId).order("sort_order");
       setRounds(roundData ?? []);
 
-      // Unread live feed count: posts from other players since this player last viewed the feed.
+      // Unread social feed count: posts from other players, plus any automatic
+      // achievement/roundup posts (even ones triggered by this player's own scoring),
+      // since this player last viewed the feed. Own manual posts stay excluded.
       // A never-viewed feed (null) counts everything currently posted as unread.
       const { count } = await supabase
         .from("posts")
         .select("id", { count: "exact", head: true })
         .eq("trip_id", tripId)
-        .neq("player_id", meData.id)
-        .gt("created_at", meData.last_feed_view_at ?? "1970-01-01");
+        .gt("created_at", meData.last_feed_view_at ?? "1970-01-01")
+        .or(`player_id.neq.${meData.id},post_type.eq.auto,post_type.eq.roundup`);
       setUnreadFeedCount(count ?? 0);
 
       setLoading(false);
