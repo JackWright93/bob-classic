@@ -211,7 +211,7 @@ function FeedInner() {
           />
           {pendingPhotoPreview && (
             <div style={{ position: "relative", marginTop: 10, borderRadius: 10, overflow: "hidden", border: "2px solid #e5e7eb" }}>
-              <img src={pendingPhotoPreview} alt="Selected" style={{ width: "100%", maxHeight: 220, objectFit: "cover", display: "block" }} />
+              <img src={pendingPhotoPreview} alt="Selected" style={{ width: "100%", maxHeight: 400, objectFit: "contain", display: "block", background: "#f0f2f0" }} />
               <button onClick={clearPendingPhoto}
                 style={{ position: "absolute", top: 8, right: 8, width: 30, height: 30, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.6)", color: WHITE, cursor: "pointer", fontSize: 15, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
             </div>
@@ -272,7 +272,7 @@ function FeedInner() {
 
               {/* Photo */}
               {post.photo_url && (
-                <img src={post.photo_url} alt="Post" style={{ width: "100%", maxHeight: 300, objectFit: "cover", display: "block" }} />
+                <img src={post.photo_url} alt="Post" style={{ width: "100%", maxHeight: 500, objectFit: "contain", display: "block", background: "#f0f2f0" }} />
               )}
 
               {/* Content */}
