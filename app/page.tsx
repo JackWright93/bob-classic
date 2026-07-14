@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Trip = { id: string; name: string; invite_code: string; };
-type Player = { id: string; name: string; is_admin: boolean; base_handicap: number | null; };
+type Player = { id: string; name: string; is_admin: boolean; base_handicap: number | null; avatar: string | null; };
 type Round = { id: string; name: string; scorecard_key: string; sort_order: number; };
 
 const GREEN = "#1a6b3c";
@@ -67,6 +67,26 @@ export default function Home() {
     window.location.reload();
   };
 
+  const getInitial = (name: string) => name.charAt(0).toUpperCase() || "?";
+
+  const renderAvatar = (avatar: string | null | undefined, name: string, size: number) => {
+    if (avatar && avatar.startsWith("http")) {
+      return <img src={avatar} alt={name} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: `2px solid ${GOLD}` }} />;
+    }
+    if (avatar) {
+      return (
+        <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.55, flexShrink: 0 }}>
+          {avatar}
+        </div>
+      );
+    }
+    return (
+      <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})`, display: "flex", alignItems: "center", justifyContent: "center", color: WHITE, fontSize: size * 0.42, fontWeight: 900, flexShrink: 0 }}>
+        {getInitial(name)}
+      </div>
+    );
+  };
+
   useEffect(() => {
     const run = async () => {
       setLoading(true);
@@ -75,7 +95,7 @@ export default function Home() {
       if (!session) { setLoading(false); return; }
       setSessionEmail(session.user.email ?? null);
 
-      const { data: allP } = await supabase.from("players").select("id, name, is_admin, base_handicap");
+      const { data: allP } = await supabase.from("players").select("id, name, is_admin, base_handicap, avatar");
       setAllPlayers(allP ?? []);
 
       const { data: meData, error: meError } = await supabase
@@ -87,7 +107,7 @@ export default function Home() {
       const { data: tripData } = await supabase.from("trips").select("id, name, invite_code").eq("id", tripId).limit(1).maybeSingle();
       if (tripData) setTrip(tripData);
 
-      const { data: playerData } = await supabase.from("players").select("id, name, is_admin, base_handicap").eq("trip_id", tripId).order("name");
+      const { data: playerData } = await supabase.from("players").select("id, name, is_admin, base_handicap, avatar").eq("trip_id", tripId).order("name");
       setPlayers(playerData ?? []);
 
       const { data: roundData } = await supabase.from("rounds").select("id, name, scorecard_key, sort_order").eq("trip_id", tripId).order("sort_order");
@@ -287,7 +307,7 @@ export default function Home() {
                 {players.map((player) => (
                   <div key={player.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 10, background: "#f9fafb" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: GREEN }} />
+                      {renderAvatar(player.avatar, player.name, 30)}
                       <span style={{ fontWeight: 700, fontSize: 14, color: "#111" }}>
                         {player.name} {player.is_admin ? "⭐" : ""}
                       </span>
