@@ -63,6 +63,7 @@ function RoundPageInner() {
   const [playerName, setPlayerName] = useState<string | null>(null);
   const [holes, setHoles] = useState<Hole[]>([]);
   const [scores, setScores] = useState<HoleScore[]>([]);
+  const [savedScores, setSavedScores] = useState<Record<number, number | null>>({});
   const [saving, setSaving] = useState<number | null>(null);
   const [specialHoles, setSpecialHoles] = useState<SpecialHoleType[]>([]);
   const [specialAwards, setSpecialAwards] = useState<SpecialAward[]>([]);
@@ -107,6 +108,7 @@ function RoundPageInner() {
         strokes: existingScores?.find((s) => s.hole_no === h.hole_no)?.strokes ?? null,
       }));
       setScores(scoreMap);
+      setSavedScores(Object.fromEntries(scoreMap.map((s) => [s.hole_no, s.strokes])));
 
       const { data: shData } = await supabase.from("special_holes").select("hole_no, type").eq("round_id", roundId);
       setSpecialHoles(shData ?? []);
@@ -136,23 +138,29 @@ function RoundPageInner() {
     return () => { supabase.removeChannel(channel); };
   }, [roundId]);
 
-  const updateScore = async (holeNo: number, newStrokes: number) => {
-    if (!playerId || !roundId || newStrokes < 1) return;
-    const hole = holes.find((h) => h.hole_no === holeNo);
-    const prevStrokes = scores.find((s) => s.hole_no === holeNo)?.strokes ?? null;
-
+  const adjustScore = (holeNo: number, newStrokes: number) => {
+    if (newStrokes < 1) return;
     setScores((prev) => prev.map((s) => s.hole_no === holeNo ? { ...s, strokes: newStrokes } : s));
+  };
+
+  const submitScore = async (holeNo: number) => {
+    if (!playerId || !roundId) return;
+    const hole = holes.find((h) => h.hole_no === holeNo);
+    const newStrokes = scores.find((s) => s.hole_no === holeNo)?.strokes ?? null;
+    if (newStrokes === null || newStrokes < 1) return;
+    const prevStrokes = savedScores[holeNo] ?? null;
+
     setSaving(holeNo);
     await supabase.from("hole_scores").upsert(
       { round_id: roundId, player_id: playerId, hole_no: holeNo, strokes: newStrokes },
       { onConflict: "round_id,player_id,hole_no" }
     );
     setSaving(null);
+    setSavedScores((prev) => ({ ...prev, [holeNo]: newStrokes }));
     loadAllScores();
 
-    // Auto-post to the live feed when a score newly becomes a birdie, eagle, or hole-in-one.
-    // "Newly" means the previous value for this hole didn't already qualify, so tapping
-    // +/- around within the same category (or re-saving) doesn't spam duplicate posts.
+    // Auto-post to the live feed only on explicit submit, and only when this hole
+    // newly becomes a birdie, eagle, or hole-in-one (not already posted for this hole).
     if (hole && tripId && playerName) {
       const prevAchievement = getAchievement(prevStrokes, hole.par, hole.stroke_index, relativeHandicap, isSandCreek);
       const newAchievement = getAchievement(newStrokes, hole.par, hole.stroke_index, relativeHandicap, isSandCreek);
@@ -175,6 +183,7 @@ function RoundPageInner() {
   const clearScore = async (holeNo: number) => {
     if (!playerId || !roundId) return;
     setScores((prev) => prev.map((s) => s.hole_no === holeNo ? { ...s, strokes: null } : s));
+    setSavedScores((prev) => ({ ...prev, [holeNo]: null }));
     await supabase.from("hole_scores").delete().eq("round_id", roundId).eq("player_id", playerId).eq("hole_no", holeNo);
     loadAllScores();
   };
@@ -383,6 +392,7 @@ function RoundPageInner() {
                   {holes.map((hole) => {
                     const score = scores.find((s) => s.hole_no === hole.hole_no);
                     const strokes = score?.strokes ?? null;
+                    const isDirty = strokes !== null && strokes !== (savedScores[hole.hole_no] ?? null);
                     const label = !isSandCreek
                       ? getScoreLabel(strokes, hole.par, hole.stroke_index, relativeHandicap)
                       : strokes !== null
@@ -412,18 +422,27 @@ function RoundPageInner() {
 
                         <div style={{ padding: "12px 14px", background: WHITE }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-                            <button onClick={() => updateScore(hole.hole_no, (strokes ?? hole.par) - 1)}
+                            <button onClick={() => adjustScore(hole.hole_no, (strokes ?? hole.par) - 1)}
                               style={{ width: 48, height: 52, borderRadius: "12px 0 0 12px", border: `2px solid ${GOLD}66`, borderRight: "none", fontSize: 26, cursor: "pointer", background: "#fffbeb", color: DARK_GREEN, fontWeight: 900 }}>−</button>
                             <div style={{ flex: 1, height: 52, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${GOLD}66`, background: WHITE, fontSize: 28, fontWeight: 900, color: "#111" }}>
                               {saving === hole.hole_no ? "·" : strokes ?? "—"}
                             </div>
-                            <button onClick={() => updateScore(hole.hole_no, (strokes ?? hole.par - 1) + 1)}
+                            <button onClick={() => adjustScore(hole.hole_no, (strokes ?? hole.par - 1) + 1)}
                               style={{ width: 48, height: 52, borderRadius: "0 12px 12px 0", border: `2px solid ${GOLD}66`, borderLeft: "none", fontSize: 26, cursor: "pointer", background: "#fffbeb", color: DARK_GREEN, fontWeight: 900 }}>+</button>
-                            {strokes !== null && (
+                            {isDirty && (
+                              <button onClick={() => submitScore(hole.hole_no)} disabled={saving === hole.hole_no}
+                                style={{ width: 44, height: 44, borderRadius: 10, border: `2px solid ${GREEN}`, background: GREEN, color: WHITE, cursor: saving === hole.hole_no ? "default" : "pointer", fontSize: 18, marginLeft: 8, fontWeight: 900 }}>
+                                {saving === hole.hole_no ? "·" : "✓"}
+                              </button>
+                            )}
+                            {strokes !== null && !isDirty && (
                               <button onClick={() => clearScore(hole.hole_no)}
                                 style={{ width: 38, height: 38, borderRadius: 10, border: "2px solid #fee2e2", background: "#fee2e2", color: "#ef4444", cursor: "pointer", fontSize: 14, marginLeft: 8, fontWeight: 900 }}>✕</button>
                             )}
                           </div>
+                          {isDirty && (
+                            <p style={{ margin: "8px 0 0", fontSize: 11, color: GREEN, fontWeight: 800, letterSpacing: 0.3 }}>TAP ✓ TO SUBMIT — won't post to the feed until you do</p>
+                          )}
 
                           {specialHoles.filter((sh) => sh.hole_no === hole.hole_no).map((sh) => {
                             const claimed = specialAwards.find((a) => a.hole_no === hole.hole_no && a.type === sh.type);
