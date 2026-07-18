@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import RegisterServiceWorker from "./register-sw";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,6 +21,11 @@ export const metadata: Metadata = {
     apple: "/icon.png",
   },
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "The Bob Classic",
+  },
 };
 
 export default function RootLayout({
@@ -28,11 +34,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    
-      <html lang="en" style={{ colorScheme: "light" }}
+    <html lang="en" style={{ colorScheme: "light" }}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <RegisterServiceWorker />
+        {children}
+      </body>
     </html>
   );
 }

@@ -1,16 +1,23 @@
 {
   "name": "The Bob Classic",
   "short_name": "Bob Classic",
-  "description": "The Bob Classic Golf Tournament App",
+  "description": "The Bob Classic golf scoring app",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1a6b3c",
-  "theme_color": "#1a6b3c",
+  "background_color": "#134d2b",
+  "theme_color": "#134d2b",
   "icons": [
     {
-      "src": "/icon.png",
+      "src": "https://kqtipluvrwczlorccmlb.supabase.co/storage/v1/object/public/assets/TBC%20Main.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://kqtipluvrwczlorccmlb.supabase.co/storage/v1/object/public/assets/TBC%20Main.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

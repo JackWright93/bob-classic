@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { isPushSupported, isRunningStandalone, getNotificationPermission, subscribeToPush, unsubscribeFromPush } from "@/lib/push";
 
 const GREEN = "#1a6b3c";
 const DARK_GREEN = "#134d2b";
@@ -22,6 +23,17 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pushPermission, setPushPermission] = useState<string>("default");
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
+  const [standalone, setStandalone] = useState(true);
+  const [pushSupported, setPushSupported] = useState(true);
+
+  useEffect(() => {
+    setStandalone(isRunningStandalone());
+    setPushSupported(isPushSupported());
+    getNotificationPermission().then((p) => setPushPermission(p));
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -71,6 +83,26 @@ export default function ProfilePage() {
   };
 
   const getInitial = (name: string) => name.charAt(0).toUpperCase() || "?";
+
+  const handleEnablePush = async () => {
+    if (!playerId) return;
+    setPushBusy(true);
+    setPushError(null);
+    const result = await subscribeToPush(playerId);
+    setPushBusy(false);
+    if (!result.ok) { setPushError(result.error ?? "Something went wrong."); return; }
+    setPushPermission("granted");
+  };
+
+  const handleDisablePush = async () => {
+    if (!playerId) return;
+    setPushBusy(true);
+    setPushError(null);
+    const result = await unsubscribeFromPush(playerId);
+    setPushBusy(false);
+    if (!result.ok) { setPushError(result.error ?? "Something went wrong."); return; }
+    setPushPermission("default");
+  };
 
   const renderPreview = (size: number) => {
     if (currentAvatar && currentAvatar.startsWith("http")) {
@@ -151,6 +183,49 @@ export default function ProfilePage() {
                   📷 Upload a Photo
                 </button>
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: "none" }} />
+              </div>
+            </div>
+
+            {/* Push notifications */}
+            <div style={{ background: WHITE, borderRadius: 20, overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 16 }}>
+              <div style={{ background: `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})`, padding: "14px 20px" }}>
+                <h2 style={{ fontSize: 14, fontWeight: 800, color: WHITE, margin: 0, letterSpacing: 1, textTransform: "uppercase" }}>🔔 Notifications</h2>
+              </div>
+              <div style={{ padding: 16 }}>
+                {!pushSupported && (
+                  <p style={{ fontSize: 13, color: GRAY, margin: 0 }}>Push notifications aren't supported on this browser.</p>
+                )}
+                {pushSupported && !standalone && (
+                  <div style={{ background: "#fffbeb", border: `1px solid ${GOLD}66`, borderRadius: 12, padding: 14 }}>
+                    <p style={{ fontSize: 13, color: DARK_GREEN, fontWeight: 700, margin: 0, marginBottom: 6 }}>Add to Home Screen first</p>
+                    <p style={{ fontSize: 13, color: "#444", margin: 0 }}>
+                      Notifications only work once this app is added to your Home Screen. Tap the Share button in Safari, then "Add to Home Screen" — then open the app from that new icon and come back here.
+                    </p>
+                  </div>
+                )}
+                {pushSupported && standalone && pushPermission !== "granted" && (
+                  <>
+                    <button onClick={handleEnablePush} disabled={pushBusy}
+                      style={{ width: "100%", padding: "14px", borderRadius: 12, border: "none", background: `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})`, color: WHITE, cursor: "pointer", fontSize: 14, fontWeight: 800 }}>
+                      {pushBusy ? "Enabling..." : "🔔 Enable Notifications"}
+                    </button>
+                    {pushPermission === "denied" && (
+                      <p style={{ fontSize: 12, color: "#ef4444", marginTop: 10 }}>
+                        Notifications were previously blocked. You'll need to re-enable them in your phone's Settings → Notifications → Bob Classic.
+                      </p>
+                    )}
+                  </>
+                )}
+                {pushSupported && standalone && pushPermission === "granted" && (
+                  <>
+                    <p style={{ fontSize: 13, color: GREEN, fontWeight: 700, marginBottom: 12 }}>✓ Notifications are on</p>
+                    <button onClick={handleDisablePush} disabled={pushBusy}
+                      style={{ width: "100%", padding: "14px", borderRadius: 12, border: "2px solid #e5e7eb", background: WHITE, color: GRAY, cursor: "pointer", fontSize: 14, fontWeight: 700 }}>
+                      {pushBusy ? "Turning off..." : "Turn Off Notifications"}
+                    </button>
+                  </>
+                )}
+                {pushError && <p style={{ fontSize: 12, color: "#ef4444", marginTop: 10 }}>{pushError}</p>}
               </div>
             </div>
 
