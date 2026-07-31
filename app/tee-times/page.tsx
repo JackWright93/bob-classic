@@ -84,7 +84,7 @@ export default function TeeTimesPage() {
     teamPlayers.filter((tp) => tp.team_id === teamId).map((tp) => players.find((p) => p.id === tp.player_id)).filter((p): p is Player => !!p);
 
   return (
-    <main style={{ minHeight: "100vh", background: BG, fontFamily: "Arial, sans-serif" }}>
+    <main style={{ minHeight: "100vh", background: GOLD, fontFamily: "Arial, sans-serif" }}>
 
       <div style={{ background: `linear-gradient(160deg, ${DARK_GREEN} 0%, #1a5c32 100%)`, padding: "16px 20px 20px", position: "relative", borderBottom: `2px solid ${GOLD}44` }}>
         <button onClick={() => router.push("/")} style={{ background: "none", border: "none", color: GOLD, fontSize: 20, cursor: "pointer", padding: 0, position: "absolute", top: 18, left: 16 }}>←</button>
@@ -128,9 +128,9 @@ export default function TeeTimesPage() {
                   const teamMembers = getPlayersForTeam(team.id);
                   return (
                     <div key={team.id} style={{ background: WHITE, borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
-                      <div style={{ background: `linear-gradient(90deg, ${GOLD}, #a8853a)`, padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: 13, fontWeight: 900, color: DARK_GREEN, letterSpacing: 0.5 }}>{team.name}</span>
-                        <span style={{ fontSize: 13, fontWeight: 900, color: DARK_GREEN }}>
+                      <div style={{ background: `linear-gradient(90deg, ${GREEN}, ${DARK_GREEN})`, padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: WHITE, letterSpacing: 0.5 }}>{team.name}</span>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: WHITE }}>
                           {team.tee_time ? `🕒 ${team.tee_time}` : "No tee time set"}
                         </span>
                       </div>
