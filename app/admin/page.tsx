@@ -12,7 +12,7 @@ const GRAY = "#6b7280";
 
 type Player = { id: string; name: string; base_handicap: number; };
 type Round = { id: string; name: string; scorecard_key: string; sort_order: number; };
-type Team = { id: string; name: string; round_id: string; };
+type Team = { id: string; name: string; round_id: string; tee_time: string | null; };
 type TeamPlayer = { id: string; team_id: string; player_id: string; };
 type ScorecardHole = { hole_no: number; par: number; };
 type SpecialHole = { id: string; round_id: string; hole_no: number; type: string; };
@@ -33,12 +33,13 @@ function AdminInner() {
   const [editingHandicap, setEditingHandicap] = useState<string | null>(null);
   const [handicapValue, setHandicapValue] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"teams" | "special" | "awards">("teams");
+  const [teeTimeDrafts, setTeeTimeDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const load = async () => {
       const { data: p } = await supabase.from("players").select("id, name, base_handicap").order("name");
       const { data: r } = await supabase.from("rounds").select("id, name, scorecard_key, sort_order").order("sort_order");
-      const { data: t } = await supabase.from("teams").select("id, name, round_id");
+      const { data: t } = await supabase.from("teams").select("id, name, round_id, tee_time");
       const { data: tp } = await supabase.from("team_players").select("id, team_id, player_id");
       const { data: sh } = await supabase.from("special_holes").select("*");
       const { data: sa } = await supabase.from("special_awards").select("*");
@@ -48,6 +49,7 @@ function AdminInner() {
       setTeamPlayers(tp ?? []);
       setSpecialHoles(sh ?? []);
       setSpecialAwards(sa ?? []);
+      setTeeTimeDrafts(Object.fromEntries((t ?? []).map((team) => [team.id, team.tee_time ?? ""])));
     };
     load();
   }, []);
@@ -88,6 +90,7 @@ function AdminInner() {
     if (newTeams) {
       setTeams((prev) => [...prev.filter((t) => !existingTeamIds.includes(t.id)), ...newTeams]);
       setTeamPlayers((prev) => prev.filter((tp) => !existingTeamIds.includes(tp.team_id)));
+      setTeeTimeDrafts((prev) => ({ ...prev, ...Object.fromEntries(newTeams.map((nt) => [nt.id, ""])) }));
     }
     setSaving(false);
     setMessage("Teams created! Assign players below.");
@@ -118,6 +121,13 @@ function AdminInner() {
     setPlayers((prev) => prev.map((p) => p.id === playerId ? { ...p, base_handicap: val } : p));
     setEditingHandicap(null);
     setMessage("Handicap updated!");
+  };
+
+  const saveTeeTime = async (teamId: string) => {
+    const value = teeTimeDrafts[teamId] ?? "";
+    await supabase.from("teams").update({ tee_time: value || null }).eq("id", teamId);
+    setTeams((prev) => prev.map((t) => t.id === teamId ? { ...t, tee_time: value || null } : t));
+    setMessage("Tee time saved!");
   };
 
   const toggleSpecialHole = async (holeNo: number, type: string) => {
@@ -197,7 +207,7 @@ function AdminInner() {
           <h2 style={{ fontSize: 16, fontWeight: "bold", marginBottom: 14, color: "#111" }}>📅 Round Management</h2>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-            {rounds.filter((r) => r.scorecard_key !== "Sand Creek Course::Par 3").map((round) => (
+            {rounds.map((round) => (
               <button key={round.id} onClick={() => { setSelectedRound(round.id); setMessage(null); }}
                 style={{ padding: "8px 16px", borderRadius: 10, border: "none", background: selectedRound === round.id ? GREEN : "#f3f4f6", color: selectedRound === round.id ? WHITE : "#374151", cursor: "pointer", fontSize: 14, fontWeight: "bold" }}>
                 {round.name}
@@ -228,6 +238,22 @@ function AdminInner() {
                     {roundTeams.map((team) => (
                       <div key={team.id} style={{ border: `1px solid ${GREEN}33`, borderRadius: 12, padding: "14px", background: LIGHT_GREEN }}>
                         <h3 style={{ fontWeight: "bold", marginBottom: 10, fontSize: 15, color: GREEN }}>{team.name}</h3>
+
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+                          <label style={{ fontSize: 13, fontWeight: "bold", color: GRAY, whiteSpace: "nowrap" }}>🕒 Tee Time:</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 8:30 AM"
+                            value={teeTimeDrafts[team.id] ?? ""}
+                            onChange={(e) => setTeeTimeDrafts((prev) => ({ ...prev, [team.id]: e.target.value }))}
+                            style={{ flex: 1, padding: "6px 10px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14 }}
+                          />
+                          <button onClick={() => saveTeeTime(team.id)}
+                            style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: GREEN, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: "bold" }}>
+                            Save
+                          </button>
+                        </div>
+
                         <div style={{ display: "grid", gap: 6 }}>
                           {players.map((player) => {
                             const isOnThisTeam = getPlayerTeam(player.id, selectedRound) === team.id;

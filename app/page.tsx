@@ -265,6 +265,10 @@ export default function Home() {
     style={{ padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, #0891b2, #0e7490)`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(8,145,178,0.4)", letterSpacing: 0.5 }}>
     🎨<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>MY AVATAR</span>
   </button>
+  <button onClick={() => router.push("/tee-times")}
+    style={{ padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, #d97706, #b45309)`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(217,119,6,0.4)", letterSpacing: 0.5 }}>
+    🕒<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>TEE TIMES</span>
+  </button>
   <button onClick={() => router.push("/admin")}
     style={{ padding: "18px 12px", borderRadius: 16, border: "2px solid #e5e7eb", background: WHITE, color: "#111", cursor: "pointer", fontSize: 13, fontWeight: 700, textAlign: "center", letterSpacing: 0.5 }}>
     ⚙️<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>ADMIN</span>
