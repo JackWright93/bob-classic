@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 type Trip = { id: string; name: string; invite_code: string; };
 type Player = { id: string; name: string; is_admin: boolean; base_handicap: number | null; avatar: string | null; };
 type Round = { id: string; name: string; scorecard_key: string; sort_order: number; };
+type TopPlayer = { id: string; name: string; avatar: string | null; totalPoints: number; };
 
 const GREEN = "#1a6b3c";
 const DARK_GREEN = "#134d2b";
@@ -14,6 +15,15 @@ const GOLD = "#c9a84c";
 const WHITE = "#ffffff";
 const GRAY = "#6b7280";
 const BG = "#f0f2f0";
+
+function calcRelativeHandicap(handicap: number, lowest: number) {
+  return Math.max(0, Math.round(handicap - lowest));
+}
+
+function getStrokesReceived(hcp: number, si: number | null) {
+  if (!si) return 0;
+  return Math.floor(hcp / 18) + (si <= (hcp % 18) ? 1 : 0);
+}
 
 export default function Home() {
   const router = useRouter();
@@ -29,6 +39,8 @@ export default function Home() {
   const [needsPlayerLink, setNeedsPlayerLink] = useState(false);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [unreadFeedCount, setUnreadFeedCount] = useState(0);
+  const [topThree, setTopThree] = useState<TopPlayer[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const sendOtp = async () => {
     setError(null);
@@ -124,6 +136,79 @@ export default function Home() {
         .gt("created_at", meData.last_feed_view_at ?? "1970-01-01")
         .or(`player_id.neq.${meData.id},post_type.eq.auto,post_type.eq.roundup`);
       setUnreadFeedCount(count ?? 0);
+
+      // Leaderboard teaser: same scoring logic as the full /leaderboard page, trimmed to the top 3.
+      const { data: allTripPlayers } = await supabase.from("players").select("id, name, base_handicap, avatar").eq("trip_id", tripId);
+      const { data: scoresData } = await supabase.from("hole_scores").select("hole_no, strokes, player_id, round_id");
+      const { data: holesData } = await supabase.from("scorecard_holes").select("hole_no, par, stroke_index, scorecard_key");
+
+      if (allTripPlayers && roundData && scoresData && holesData) {
+        const lowest = Math.min(...allTripPlayers.map((p) => p.base_handicap ?? 0));
+
+        const ranked: TopPlayer[] = allTripPlayers.map((player) => {
+          const hcp = calcRelativeHandicap(player.base_handicap ?? 0, lowest);
+          let total = 0;
+
+          roundData.forEach((round) => {
+            const isSC = round.scorecard_key === "Sand Creek Course::Par 3";
+            const roundHoles = holesData.filter((h) => h.scorecard_key === round.scorecard_key);
+            const playerScores = scoresData.filter((s) => s.player_id === player.id && s.round_id === round.id);
+            if (playerScores.length === 0) return;
+
+            let pts = 0;
+            playerScores.forEach((score) => {
+              const hole = roundHoles.find((h) => h.hole_no === score.hole_no);
+              if (!hole) return;
+              if (isSC) {
+                if (score.strokes === hole.par - 1) pts += 1;
+              } else {
+                const sr = getStrokesReceived(hcp, hole.stroke_index);
+                const diff = score.strokes - sr - hole.par;
+                if (score.strokes === 1) pts += 5;
+                else if (diff <= -2) pts += 3;
+                else if (diff === -1) pts += 1;
+              }
+            });
+
+            if (isSC) {
+              const t = playerScores.reduce((s, x) => s + x.strokes, 0);
+              if (playerScores.length === 9 && t <= 27) pts += 1;
+            }
+
+            const allTotals = allTripPlayers.map((p) => {
+              const ps = scoresData.filter((s) => s.player_id === p.id && s.round_id === round.id);
+              if (ps.length < roundHoles.length) return null;
+              return { id: p.id, total: ps.reduce((s, x) => s + x.strokes, 0) };
+            }).filter(Boolean) as { id: string; total: number }[];
+
+            if (allTotals.length >= 2) {
+              const sorted = [...allTotals].sort((a, b) => a.total - b.total);
+              const pm: Record<number, number> = { 0: 3, 1: 2, 2: 1 };
+              let i = 0;
+              while (i < sorted.length) {
+                let j = i;
+                while (j < sorted.length && sorted[j].total === sorted[i].total) j++;
+                const shared = Math.floor(
+                  Array.from({ length: j - i }, (_, k) => pm[i + k] ?? 0).reduce((a, b) => a + b, 0) / (j - i)
+                );
+                if (shared > 0) {
+                  for (let k = i; k < j; k++) {
+                    if (sorted[k].id === player.id) pts += shared;
+                  }
+                }
+                i = j;
+              }
+            }
+
+            total += pts;
+          });
+
+          return { id: player.id, name: player.name, avatar: player.avatar, totalPoints: total };
+        });
+
+        ranked.sort((a, b) => b.totalPoints - a.totalPoints);
+        setTopThree(ranked.slice(0, 3));
+      }
 
       setLoading(false);
     };
@@ -242,42 +327,76 @@ export default function Home() {
 
             {error && <div style={{ background: "#fee2e2", borderRadius: 12, padding: "12px 16px", color: "#991b1b", fontSize: 14, fontWeight: 600 }}>{error}</div>}
 
-            {/* Nav Buttons */}
+            {/* Live Leaderboard Teaser */}
+            {topThree.length > 0 && (
+              <div onClick={() => router.push("/leaderboard")}
+                style={{ cursor: "pointer", borderRadius: 16, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}>
+                <div style={{ background: `linear-gradient(135deg, ${GOLD}, #a8853a)`, padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 13, fontWeight: 900, color: DARK_GREEN, letterSpacing: 0.5 }}>🏆 LIVE LEADERBOARD</span>
+                  <span style={{ fontSize: 13, fontWeight: 900, color: DARK_GREEN }}>View Full →</span>
+                </div>
+                <div style={{ background: DARK_GREEN, padding: "14px 16px", display: "flex", justifyContent: "space-around" }}>
+                  {topThree.map((player, index) => {
+                    const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉";
+                    return (
+                      <div key={player.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                        <div style={{ position: "relative" }}>
+                          {renderAvatar(player.avatar, player.name, 46)}
+                          <span style={{ position: "absolute", bottom: -4, right: -4, fontSize: 16 }}>{medal}</span>
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: WHITE, textAlign: "center", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{player.name}</span>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: GOLD }}>{player.totalPoints} pts</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Main Tabs */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-  <button onClick={() => router.push("/leaderboard")}
-    style={{ padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, ${GOLD}, #a8853a)`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(201,168,76,0.4)", letterSpacing: 0.5 }}>
-    🏆<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>LEADERBOARD</span>
-  </button>
-  <button onClick={() => router.push("/feed")}
-    style={{ position: "relative", padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, #7c3aed, #5b21b6)`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(124,58,237,0.4)", letterSpacing: 0.5 }}>
-    ⚡<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>SOCIAL FEED</span>
-    {unreadFeedCount > 0 && (
-      <span style={{ position: "absolute", top: -6, right: -6, minWidth: 22, height: 22, borderRadius: 11, background: "#ff3b30", color: WHITE, fontSize: 11, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid " + WHITE, boxShadow: "0 2px 6px rgba(0,0,0,0.3)" }}>
-        {unreadFeedCount > 9 ? "9+" : unreadFeedCount}
-      </span>
-    )}
-  </button>
-  <button onClick={() => router.push("/history")}
-    style={{ padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(26,107,60,0.4)", letterSpacing: 0.5 }}>
-    🏅<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>HALL OF CHAMPIONS</span>
-  </button>
-  <button onClick={() => router.push("/profile")}
-    style={{ padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, #0891b2, #0e7490)`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(8,145,178,0.4)", letterSpacing: 0.5 }}>
-    🎨<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>MY AVATAR</span>
-  </button>
-  <button onClick={() => router.push("/tee-times")}
-    style={{ padding: "20px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, #d97706, #b45309)`, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(217,119,6,0.4)", letterSpacing: 0.5 }}>
-    🕒<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>TEE TIMES</span>
-  </button>
-  <button onClick={() => router.push("/admin")}
-    style={{ padding: "18px 12px", borderRadius: 16, border: "2px solid #e5e7eb", background: WHITE, color: "#111", cursor: "pointer", fontSize: 13, fontWeight: 700, textAlign: "center", letterSpacing: 0.5 }}>
-    ⚙️<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>ADMIN</span>
-  </button>
-  <button onClick={logout}
-    style={{ padding: "18px 12px", borderRadius: 16, border: "2px solid #e5e7eb", background: WHITE, color: "#111", cursor: "pointer", fontSize: 13, fontWeight: 700, textAlign: "center", letterSpacing: 0.5 }}>
-    👋<br /><span style={{ fontSize: 12, marginTop: 4, display: "block" }}>LOG OUT</span>
-  </button>
-</div>
+              <button onClick={() => router.push("/feed")}
+                style={{ position: "relative", padding: "24px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, #7c3aed, #5b21b6)`, color: WHITE, cursor: "pointer", fontSize: 14, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(124,58,237,0.4)", letterSpacing: 0.5 }}>
+                <span style={{ fontSize: 22 }}>⚡</span><br /><span style={{ fontSize: 13, marginTop: 6, display: "block" }}>SOCIAL FEED</span>
+                {unreadFeedCount > 0 && (
+                  <span style={{ position: "absolute", top: -6, right: -6, minWidth: 22, height: 22, borderRadius: 11, background: "#ff3b30", color: WHITE, fontSize: 11, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid " + WHITE, boxShadow: "0 2px 6px rgba(0,0,0,0.3)" }}>
+                    {unreadFeedCount > 9 ? "9+" : unreadFeedCount}
+                  </span>
+                )}
+              </button>
+              <button onClick={() => router.push("/tee-times")}
+                style={{ padding: "24px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, #d97706, #b45309)`, color: WHITE, cursor: "pointer", fontSize: 14, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(217,119,6,0.4)", letterSpacing: 0.5 }}>
+                <span style={{ fontSize: 22 }}>🕒</span><br /><span style={{ fontSize: 13, marginTop: 6, display: "block" }}>TEE TIMES</span>
+              </button>
+            </div>
+
+            {/* More menu */}
+            <div style={{ position: "relative" }}>
+              <button onClick={() => setMenuOpen((prev) => !prev)}
+                style={{ width: "100%", padding: "12px", borderRadius: 12, border: "2px solid #e5e7eb", background: WHITE, color: "#374151", cursor: "pointer", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                ☰ More {menuOpen ? "▲" : "▼"}
+              </button>
+              {menuOpen && (
+                <div style={{ marginTop: 8, background: WHITE, borderRadius: 12, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.12)", border: "1px solid #e5e7eb" }}>
+                  {[
+                    { label: "🏆 Leaderboard", path: "/leaderboard" },
+                    { label: "🏅 Hall of Champions", path: "/history" },
+                    { label: "🎨 My Avatar", path: "/profile" },
+                    { label: "📖 Scoring & Rules", path: "/rules" },
+                    { label: "⚙️ Admin", path: "/admin" },
+                  ].map((item, i, arr) => (
+                    <button key={item.path} onClick={() => { setMenuOpen(false); router.push(item.path); }}
+                      style={{ width: "100%", padding: "14px 16px", border: "none", borderBottom: i < arr.length - 1 ? "1px solid #f0f2f0" : "none", background: WHITE, color: "#111", cursor: "pointer", fontSize: 14, fontWeight: 700, textAlign: "left" }}>
+                      {item.label}
+                    </button>
+                  ))}
+                  <button onClick={() => { setMenuOpen(false); logout(); }}
+                    style={{ width: "100%", padding: "14px 16px", border: "none", background: "#fef2f2", color: "#ef4444", cursor: "pointer", fontSize: 14, fontWeight: 700, textAlign: "left" }}>
+                    👋 Log Out
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Rounds */}
             <div style={{ background: WHITE, borderRadius: 20, overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
