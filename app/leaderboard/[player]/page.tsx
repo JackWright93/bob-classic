@@ -36,13 +36,34 @@ function PlayerDetailInner() {
   const playerId = params.player as string;
 
   const [playerName, setPlayerName] = useState("");
+  const [playerAvatar, setPlayerAvatar] = useState<string | null>(null);
   const [totalPoints, setTotalPoints] = useState(0);
   const [rounds, setRounds] = useState<RoundBreakdown[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const getInitial = (name: string) => name.charAt(0).toUpperCase() || "?";
+
+  const renderAvatar = (avatar: string | null, name: string, size: number) => {
+    if (avatar && avatar.startsWith("http")) {
+      return <img src={avatar} alt={name} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover" }} />;
+    }
+    if (avatar) {
+      return (
+        <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg, ${GOLD}, #a8853a)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.5 }}>
+          {avatar}
+        </div>
+      );
+    }
+    return (
+      <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg, ${GOLD}, #a8853a)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.4, fontWeight: 900, color: DARK_GREEN }}>
+        {getInitial(name)}
+      </div>
+    );
+  };
+
   useEffect(() => {
     const run = async () => {
-      const { data: players } = await supabase.from("players").select("id, name, base_handicap");
+      const { data: players } = await supabase.from("players").select("id, name, base_handicap, avatar");
       const { data: roundsData } = await supabase.from("rounds").select("id, name, scorecard_key, sort_order").order("sort_order");
       const { data: allScores } = await supabase.from("hole_scores").select("hole_no, strokes, player_id, round_id");
       const { data: allHoles } = await supabase.from("scorecard_holes").select("hole_no, par, stroke_index, scorecard_key");
@@ -52,6 +73,7 @@ function PlayerDetailInner() {
       const player = players.find((p) => p.id === playerId);
       if (!player) return;
       setPlayerName(player.name);
+      setPlayerAvatar(player.avatar ?? null);
 
       const lowestHandicap = Math.min(...players.map((p) => p.base_handicap ?? 0));
       const relativeHandicap = calcRelativeHandicap(player.base_handicap ?? 0, lowestHandicap);
@@ -142,8 +164,8 @@ function PlayerDetailInner() {
               <span style={{ color: GOLD, fontSize: 11, fontWeight: 700, letterSpacing: 2 }}>PLAYER SCORECARD</span>
               <div style={{ height: 1, width: 30, background: GOLD, opacity: 0.5 }} />
             </div>
-            <div style={{ width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${GOLD}, #a8853a)`, margin: "0 auto 10px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 900, color: DARK_GREEN, boxShadow: `0 0 0 3px ${DARK_GREEN}, 0 0 0 5px ${GOLD}44` }}>
-              {playerName.charAt(0)}
+            <div style={{ width: 60, height: 60, borderRadius: "50%", margin: "0 auto 10px", boxShadow: `0 0 0 3px ${DARK_GREEN}, 0 0 0 5px ${GOLD}44`, overflow: "hidden" }}>
+              {renderAvatar(playerAvatar, playerName, 60)}
             </div>
             <h1 style={{ color: WHITE, fontSize: 24, fontWeight: 900, margin: 0, letterSpacing: 2, textTransform: "uppercase" }}>{playerName}</h1>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 8, background: RED, borderRadius: 8, padding: "4px 16px" }}>
