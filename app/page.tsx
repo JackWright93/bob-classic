@@ -356,7 +356,7 @@ export default function Home() {
             {/* Main Tabs */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <button onClick={() => router.push("/feed")}
-                style={{ position: "relative", padding: "24px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, #7c3aed, #5b21b6)`, color: WHITE, cursor: "pointer", fontSize: 14, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(124,58,237,0.4)", letterSpacing: 0.5 }}>
+                style={{ position: "relative", padding: "24px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, ${GOLD}, #a8853a)`, color: WHITE, cursor: "pointer", fontSize: 14, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(201,168,76,0.4)", letterSpacing: 0.5 }}>
                 <span style={{ fontSize: 22 }}>⚡</span><br /><span style={{ fontSize: 13, marginTop: 6, display: "block" }}>SOCIAL FEED</span>
                 {unreadFeedCount > 0 && (
                   <span style={{ position: "absolute", top: -6, right: -6, minWidth: 22, height: 22, borderRadius: 11, background: "#ff3b30", color: WHITE, fontSize: 11, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid " + WHITE, boxShadow: "0 2px 6px rgba(0,0,0,0.3)" }}>
@@ -365,7 +365,7 @@ export default function Home() {
                 )}
               </button>
               <button onClick={() => router.push("/tee-times")}
-                style={{ padding: "24px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, #d97706, #b45309)`, color: WHITE, cursor: "pointer", fontSize: 14, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(217,119,6,0.4)", letterSpacing: 0.5 }}>
+                style={{ padding: "24px 12px", borderRadius: 16, border: "none", background: `linear-gradient(135deg, ${GOLD}, #a8853a)`, color: WHITE, cursor: "pointer", fontSize: 14, fontWeight: 800, textAlign: "center", boxShadow: "0 4px 12px rgba(201,168,76,0.4)", letterSpacing: 0.5 }}>
                 <span style={{ fontSize: 22 }}>🕒</span><br /><span style={{ fontSize: 13, marginTop: 6, display: "block" }}>TEE TIMES</span>
               </button>
             </div>
@@ -381,7 +381,7 @@ export default function Home() {
                   {[
                     { label: "🏆 Leaderboard", path: "/leaderboard" },
                     { label: "🏅 Hall of Champions", path: "/history" },
-                    { label: "🎨 My Avatar", path: "/profile" },
+                    { label: "🎨 My Locker", path: "/profile" },
                     { label: "📖 Scoring & Rules", path: "/rules" },
                     { label: "⚙️ Admin", path: "/admin" },
                   ].map((item, i, arr) => (

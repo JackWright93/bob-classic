@@ -14,6 +14,7 @@ const BG = "#ffffff";
 type PlayerPoints = {
   id: string;
   name: string;
+  avatar: string | null;
   totalPoints: number;
   roundSummary: { name: string; points: number }[];
 };
@@ -33,8 +34,28 @@ function LeaderboardInner() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  const getInitial = (name: string) => name.charAt(0).toUpperCase() || "?";
+
+  const renderAvatar = (avatar: string | null | undefined, name: string, size: number) => {
+    if (avatar && avatar.startsWith("http")) {
+      return <img src={avatar} alt={name} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", border: `2px solid ${GOLD}`, flexShrink: 0 }} />;
+    }
+    if (avatar) {
+      return (
+        <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.55, flexShrink: 0 }}>
+          {avatar}
+        </div>
+      );
+    }
+    return (
+      <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg, ${GREEN}, ${DARK_GREEN})`, display: "flex", alignItems: "center", justifyContent: "center", color: WHITE, fontSize: size * 0.42, fontWeight: 900, flexShrink: 0 }}>
+        {getInitial(name)}
+      </div>
+    );
+  };
+
   const calculate = async () => {
-    const { data: players } = await supabase.from("players").select("id, name, base_handicap");
+    const { data: players } = await supabase.from("players").select("id, name, base_handicap, avatar");
     const { data: rounds } = await supabase.from("rounds").select("id, name, scorecard_key, sort_order").order("sort_order");
     const { data: scores } = await supabase.from("hole_scores").select("hole_no, strokes, player_id, round_id");
     const { data: holes } = await supabase.from("scorecard_holes").select("hole_no, par, stroke_index, scorecard_key");
@@ -103,7 +124,7 @@ function LeaderboardInner() {
         roundSummary.push({ name: round.name, points: pts });
       });
 
-      return { id: player.id, name: player.name, totalPoints: total, roundSummary };
+      return { id: player.id, name: player.name, avatar: player.avatar, totalPoints: total, roundSummary };
     });
 
     result.sort((a, b) => b.totalPoints - a.totalPoints);
@@ -151,6 +172,7 @@ function LeaderboardInner() {
             {/* Column headers */}
             <div style={{ background: DARK_GREEN, padding: "8px 16px", display: "flex", alignItems: "center", borderBottom: `1px solid ${GOLD}44` }}>
               <div style={{ width: 36 }} />
+              <div style={{ width: 40 }} />
               <div style={{ flex: 1, fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>PLAYER</div>
               <div style={{ width: 60, textAlign: "center", fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>PTS</div>
             </div>
@@ -165,6 +187,9 @@ function LeaderboardInner() {
                   <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", background: isFirst ? `linear-gradient(90deg, ${GREEN}cc, ${DARK_GREEN}cc)` : `${DARK_GREEN}99` }}>
                     <div style={{ width: 36, fontSize: isFirst ? 20 : 14, fontWeight: 900, color: isFirst ? GOLD : `${GOLD}88`, textAlign: "center" }}>
                       {medal ?? `${index + 1}`}
+                    </div>
+                    <div style={{ width: 40, display: "flex", justifyContent: "center" }}>
+                      {renderAvatar(player.avatar, player.name, 34)}
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 16, fontWeight: 900, color: WHITE, letterSpacing: 0.5, textTransform: "uppercase" }}>{player.name}</div>

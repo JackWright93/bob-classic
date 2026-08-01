@@ -132,7 +132,7 @@ export default function ProfilePage() {
             <span style={{ color: GOLD, fontSize: 11, fontWeight: 700, letterSpacing: 2 }}>THE BOB CLASSIC</span>
             <div style={{ height: 1, width: 30, background: GOLD, opacity: 0.5 }} />
           </div>
-          <h1 style={{ color: WHITE, fontSize: 22, fontWeight: 900, margin: 0, letterSpacing: 2, textTransform: "uppercase" }}>🎨 My Avatar</h1>
+          <h1 style={{ color: WHITE, fontSize: 22, fontWeight: 900, margin: 0, letterSpacing: 2, textTransform: "uppercase" }}>🎨 My Locker</h1>
         </div>
       </div>
 
