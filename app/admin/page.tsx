@@ -34,6 +34,9 @@ function AdminInner() {
   const [handicapValue, setHandicapValue] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"teams" | "special" | "awards">("teams");
   const [teeTimeDrafts, setTeeTimeDrafts] = useState<Record<string, string>>({});
+  const [archiveYear, setArchiveYear] = useState(new Date().getFullYear());
+  const [archiving, setArchiving] = useState(false);
+  const [archiveMessage, setArchiveMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -154,6 +157,137 @@ function AdminInner() {
     setMessage("Award denied.");
   };
 
+  const archiveYearToHistory = async () => {
+    setArchiving(true);
+    setArchiveMessage(null);
+    try {
+      const { data: allPlayers } = await supabase.from("players").select("id, name, base_handicap");
+      const { data: allScores } = await supabase.from("hole_scores").select("hole_no, strokes, player_id, round_id");
+      const { data: allHoles } = await supabase.from("scorecard_holes").select("hole_no, par, stroke_index, scorecard_key");
+
+      if (!allPlayers || !rounds || !allScores || !allHoles) {
+        setArchiveMessage("Couldn't load data to archive.");
+        setArchiving(false);
+        return;
+      }
+
+      const lowest = Math.min(...allPlayers.map((p) => p.base_handicap ?? 0));
+      const calcRelHcp = (h: number) => Math.max(0, Math.round(h - lowest));
+      const getSR = (hcp: number, si: number | null) => (!si ? 0 : Math.floor(hcp / 18) + (si <= hcp % 18 ? 1 : 0));
+
+      // Total points per player (mirrors the live leaderboard's scoring exactly)
+      const totals: Record<string, number> = {};
+      allPlayers.forEach((player) => {
+        const hcp = calcRelHcp(player.base_handicap ?? 0);
+        let total = 0;
+
+        rounds.forEach((round) => {
+          const roundHoles = allHoles.filter((h) => h.scorecard_key === round.scorecard_key);
+          const playerScores = allScores.filter((s) => s.player_id === player.id && s.round_id === round.id);
+          if (playerScores.length === 0) return;
+
+          let pts = 0;
+          playerScores.forEach((score) => {
+            const hole = roundHoles.find((h) => h.hole_no === score.hole_no);
+            if (!hole) return;
+            const sr = getSR(hcp, hole.stroke_index);
+            const diff = score.strokes - sr - hole.par;
+            if (score.strokes === 1) pts += 5;
+            else if (diff <= -2) pts += 3;
+            else if (diff === -1) pts += 1;
+          });
+
+          const allTotals = allPlayers.map((p) => {
+            const ps = allScores.filter((s) => s.player_id === p.id && s.round_id === round.id);
+            if (ps.length < roundHoles.length) return null;
+            return { id: p.id, total: ps.reduce((s, x) => s + x.strokes, 0) };
+          }).filter(Boolean) as { id: string; total: number }[];
+
+          if (allTotals.length >= 2) {
+            const sorted = [...allTotals].sort((a, b) => a.total - b.total);
+            const pm: Record<number, number> = { 0: 3, 1: 2, 2: 1 };
+            let i = 0;
+            while (i < sorted.length) {
+              let j = i;
+              while (j < sorted.length && sorted[j].total === sorted[i].total) j++;
+              const shared = Math.floor(Array.from({ length: j - i }, (_, k) => pm[i + k] ?? 0).reduce((a, b) => a + b, 0) / (j - i));
+              if (shared > 0) {
+                for (let k = i; k < j; k++) if (sorted[k].id === player.id) pts += shared;
+              }
+              i = j;
+            }
+          }
+
+          total += pts;
+        });
+
+        totals[player.id] = total;
+      });
+
+      const ranked = allPlayers
+        .map((p) => ({ id: p.id, name: p.name, points: totals[p.id] ?? 0 }))
+        .sort((a, b) => b.points - a.points);
+
+      // Find or create this year's historical_winners row
+      let { data: existing } = await supabase.from("historical_winners").select("id").eq("year", archiveYear).maybeSingle();
+      let historicalId = existing?.id;
+      if (!historicalId) {
+        const { data: created } = await supabase
+          .from("historical_winners")
+          .insert({ year: archiveYear, winner_name: "TBD", location: rounds.map((r) => r.name).join(" · ") })
+          .select()
+          .single();
+        historicalId = created?.id;
+      }
+      if (!historicalId) {
+        setArchiveMessage("Couldn't create a record for this year.");
+        setArchiving(false);
+        return;
+      }
+
+      // Clear and rewrite standings + course scores (safe to re-run any time during/after the trip)
+      await supabase.from("historical_standings").delete().eq("historical_winner_id", historicalId);
+      await supabase.from("historical_course_scores").delete().eq("historical_winner_id", historicalId);
+
+      const standingsRows = ranked.map((p, i) => ({
+        historical_winner_id: historicalId,
+        rank: i + 1,
+        player_name: p.name,
+        points: p.points,
+      }));
+      await supabase.from("historical_standings").insert(standingsRows);
+
+      const courseRows: { historical_winner_id: string; course_name: string; player_name: string; gross_score: number | null; sort_order: number; }[] = [];
+      rounds.forEach((round) => {
+        allPlayers.forEach((player) => {
+          const ps = allScores.filter((s) => s.player_id === player.id && s.round_id === round.id);
+          if (ps.length === 0) return;
+          courseRows.push({
+            historical_winner_id: historicalId!,
+            course_name: round.name,
+            player_name: player.name,
+            gross_score: ps.reduce((s, x) => s + x.strokes, 0),
+            sort_order: round.sort_order,
+          });
+        });
+      });
+      if (courseRows.length > 0) await supabase.from("historical_course_scores").insert(courseRows);
+
+      // Update the winner record itself
+      const champion = ranked[0];
+      await supabase.from("historical_winners").update({
+        winner_name: champion ? champion.name : "TBD",
+        total_points: champion ? champion.points : null,
+        location: rounds.map((r) => r.name).join(" · "),
+      }).eq("id", historicalId);
+
+      setArchiveMessage(champion ? `Archived! ${champion.name} leads with ${champion.points} pts.` : "Archived, but no scores found yet.");
+    } catch (err) {
+      setArchiveMessage("Something went wrong archiving this year.");
+    }
+    setArchiving(false);
+  };
+
   const roundTeams = selectedRound ? getTeamsForRound(selectedRound) : [];
   const teamsReady = roundTeams.length === 3;
   const frontNine = holes.filter((h) => h.hole_no <= 9);
@@ -203,7 +337,7 @@ function AdminInner() {
         </div>
 
         {/* Round Management */}
-        <div style={{ background: WHITE, borderRadius: 16, padding: 20, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+        <div style={{ background: WHITE, borderRadius: 16, padding: 20, boxShadow: "0 2px 8px rgba(0,0,0,0.06)", marginBottom: 20 }}>
           <h2 style={{ fontSize: 16, fontWeight: "bold", marginBottom: 14, color: "#111" }}>📅 Round Management</h2>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
@@ -350,6 +484,28 @@ function AdminInner() {
                 </div>
               )}
             </>
+          )}
+        </div>
+
+        {/* Archive to Hall of Champions */}
+        <div style={{ background: WHITE, borderRadius: 16, padding: 20, boxShadow: "0 2px 8px rgba(0,0,0,0.06)", marginTop: 20 }}>
+          <h2 style={{ fontSize: 16, fontWeight: "bold", marginBottom: 8, color: "#111" }}>🏛 Archive to Hall of Champions</h2>
+          <p style={{ fontSize: 13, color: GRAY, marginBottom: 14, lineHeight: 1.5 }}>
+            Computes final standings and each course's scores from the current live data, then saves them permanently to the Hall of Champions for the year below. Safe to run more than once — running it again just refreshes the numbers, useful mid-trip too.
+          </p>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+            <label style={{ fontSize: 13, fontWeight: "bold", color: GRAY }}>Year:</label>
+            <input type="number" value={archiveYear} onChange={(e) => setArchiveYear(parseInt(e.target.value, 10) || archiveYear)}
+              style={{ width: 90, padding: "8px 10px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14 }} />
+          </div>
+          <button onClick={archiveYearToHistory} disabled={archiving}
+            style={{ width: "100%", padding: "14px", borderRadius: 10, border: "none", background: GREEN, color: WHITE, cursor: "pointer", fontSize: 15, fontWeight: "bold" }}>
+            {archiving ? "Archiving..." : `📊 Compute & Archive ${archiveYear}`}
+          </button>
+          {archiveMessage && (
+            <div style={{ marginTop: 12, background: LIGHT_GREEN, border: `1px solid ${GREEN}44`, borderRadius: 10, padding: "10px 14px", color: GREEN, fontSize: 13, fontWeight: "bold" }}>
+              {archiveMessage}
+            </div>
           )}
         </div>
       </div>
