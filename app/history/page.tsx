@@ -157,7 +157,7 @@ function HistoryInner() {
                             const rowStyle = { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 10, background: s.rank === 1 ? "#fffbeb" : "#f9fafb", border: s.rank === 1 ? `1px solid ${GOLD}` : "1px solid #e5e7eb", cursor: matchedPlayer ? "pointer" : "default" } as const;
                             return (
                               <div key={s.id} onClick={() => matchedPlayer && router.push(`/leaderboard/${matchedPlayer.id}`)} style={rowStyle}>
-                                <span style={{ fontWeight: 700, fontSize: 14, textDecoration: matchedPlayer ? "underline" : "none" }}>{medal} {s.player_name}</span>
+                                <span style={{ fontWeight: 700, fontSize: 14, textDecoration: matchedPlayer ? "underline" : "none", color: GREEN }}>{medal} {s.player_name}</span>
                                 <span style={{ fontWeight: 800, fontSize: 14, color: GREEN }}>{s.points} pts</span>
                               </div>
                             );
@@ -178,7 +178,7 @@ function HistoryInner() {
                               <div style={{ display: "grid", gap: 4 }}>
                                 {course.players.map((p) => (
                                   <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px", borderRadius: 8, background: "#f9fafb", fontSize: 13 }}>
-                                    <span style={{ fontWeight: 600 }}>{p.player_name}</span>
+                                    <span style={{ fontWeight: 600, color: GREEN }}>{p.player_name}</span>
                                     <span style={{ fontWeight: 800, color: "#374151" }}>{p.gross_score ?? "—"}</span>
                                   </div>
                                 ))}
