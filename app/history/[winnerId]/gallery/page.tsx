@@ -28,6 +28,13 @@ export default function GalleryPage() {
   const [viewingIndex, setViewingIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const touchStartX = useRef<number | null>(null);
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const pinchStartDist = useRef<number | null>(null);
+  const pinchStartScale = useRef(1);
+  const panStart = useRef<{ x: number; y: number } | null>(null);
+  const panStartOffset = useRef({ x: 0, y: 0 });
+  const lastTapTime = useRef(0);
 
   const load = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -45,6 +52,26 @@ export default function GalleryPage() {
   };
 
   useEffect(() => { if (winnerId) load(); }, [winnerId]);
+
+  // Reset zoom/pan whenever a new photo is shown or the lightbox closes
+  useEffect(() => {
+    setScale(1);
+    setOffset({ x: 0, y: 0 });
+  }, [viewingIndex]);
+
+  const getTouchDistance = (touches: React.TouchList) => {
+    const a = touches[0], b = touches[1];
+    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  };
+
+  const toggleZoom = () => {
+    if (scale > 1) {
+      setScale(1);
+      setOffset({ x: 0, y: 0 });
+    } else {
+      setScale(2.5);
+    }
+  };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -85,15 +112,61 @@ export default function GalleryPage() {
   const showNext = () => setViewingIndex((idx) => (idx !== null && idx < photos.length - 1 ? idx + 1 : idx));
 
   const onTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
+    if (e.touches.length === 2) {
+      pinchStartDist.current = getTouchDistance(e.touches);
+      pinchStartScale.current = scale;
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      if (scale > 1) {
+        panStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        panStartOffset.current = offset;
+      } else {
+        touchStartX.current = e.touches[0].clientX;
+      }
+
+      const now = Date.now();
+      if (now - lastTapTime.current < 300) {
+        toggleZoom();
+      }
+      lastTapTime.current = now;
+    }
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchStartDist.current) {
+      const dist = getTouchDistance(e.touches);
+      const nextScale = Math.min(4, Math.max(1, pinchStartScale.current * (dist / pinchStartDist.current)));
+      setScale(nextScale);
+      return;
+    }
+
+    if (e.touches.length === 1 && scale > 1 && panStart.current) {
+      const dx = e.touches[0].clientX - panStart.current.x;
+      const dy = e.touches[0].clientY - panStart.current.y;
+      setOffset({ x: panStartOffset.current.x + dx, y: panStartOffset.current.y + dy });
+    }
   };
 
   const onTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
-    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
-    const threshold = 50;
-    if (deltaX > threshold) showPrev();
-    else if (deltaX < -threshold) showNext();
+    if (pinchStartDist.current) {
+      pinchStartDist.current = null;
+      if (scale < 1.05) { setScale(1); setOffset({ x: 0, y: 0 }); }
+      return;
+    }
+
+    if (panStart.current) {
+      panStart.current = null;
+      return;
+    }
+
+    if (scale <= 1 && touchStartX.current !== null) {
+      const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+      const threshold = 50;
+      if (deltaX > threshold) showPrev();
+      else if (deltaX < -threshold) showNext();
+    }
     touchStartX.current = null;
   };
 
@@ -153,8 +226,8 @@ export default function GalleryPage() {
 
       {/* Photo lightbox */}
       {viewingIndex !== null && photos[viewingIndex] && (
-        <div onClick={() => setViewingIndex(null)} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20, touchAction: "pan-y" }}>
+        <div onClick={() => setViewingIndex(null)} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20, touchAction: "none", overflow: "hidden" }}>
           <button onClick={() => setViewingIndex(null)}
             style={{ position: "absolute", top: 20, right: 20, width: 40, height: 40, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.15)", color: WHITE, fontSize: 20, cursor: "pointer", zIndex: 1 }}>
             ✕
@@ -181,8 +254,8 @@ export default function GalleryPage() {
             </button>
           )}
 
-          <img src={photos[viewingIndex].photo_url} alt="" onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: "100%", maxHeight: "80vh", objectFit: "contain", borderRadius: 8, userSelect: "none" }} />
+          <img src={photos[viewingIndex].photo_url} alt="" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => { e.stopPropagation(); toggleZoom(); }}
+            style={{ maxWidth: "100%", maxHeight: "80vh", objectFit: "contain", borderRadius: 8, userSelect: "none", transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`, transition: pinchStartDist.current || panStart.current ? "none" : "transform 0.15s ease-out", cursor: scale > 1 ? "grab" : "zoom-in" }} />
           <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12 }}>
             {photos[viewingIndex].uploaded_by && (
               <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 13 }}>Uploaded by {photos[viewingIndex].uploaded_by}</span>
