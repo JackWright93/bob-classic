@@ -25,8 +25,9 @@ export default function GalleryPage() {
   const [playerName, setPlayerName] = useState<string>("Someone");
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [viewingPhoto, setViewingPhoto] = useState<HistPhoto | null>(null);
+  const [viewingIndex, setViewingIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const touchStartX = useRef<number | null>(null);
 
   const load = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -69,8 +70,31 @@ export default function GalleryPage() {
 
   const deletePhoto = async (photo: HistPhoto) => {
     await supabase.from("historical_photos").delete().eq("id", photo.id);
-    setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
-    setViewingPhoto(null);
+    setPhotos((prev) => {
+      const next = prev.filter((p) => p.id !== photo.id);
+      setViewingIndex((idx) => {
+        if (idx === null) return null;
+        if (next.length === 0) return null;
+        return Math.min(idx, next.length - 1);
+      });
+      return next;
+    });
+  };
+
+  const showPrev = () => setViewingIndex((idx) => (idx !== null && idx > 0 ? idx - 1 : idx));
+  const showNext = () => setViewingIndex((idx) => (idx !== null && idx < photos.length - 1 ? idx + 1 : idx));
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+    const threshold = 50;
+    if (deltaX > threshold) showPrev();
+    else if (deltaX < -threshold) showNext();
+    touchStartX.current = null;
   };
 
   return (
@@ -113,8 +137,8 @@ export default function GalleryPage() {
               </div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                {photos.map((photo) => (
-                  <div key={photo.id} onClick={() => setViewingPhoto(photo)} style={{ borderRadius: 12, overflow: "hidden", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", background: WHITE }}>
+                {photos.map((photo, index) => (
+                  <div key={photo.id} onClick={() => setViewingIndex(index)} style={{ borderRadius: 12, overflow: "hidden", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", background: WHITE }}>
                     <img src={photo.photo_url} alt="" style={{ width: "100%", height: 160, objectFit: "cover", display: "block" }} />
                     {photo.uploaded_by && (
                       <div style={{ fontSize: 11, color: GRAY, padding: "5px 4px", textAlign: "center" }}>by {photo.uploaded_by}</div>
@@ -128,21 +152,43 @@ export default function GalleryPage() {
       </div>
 
       {/* Photo lightbox */}
-      {viewingPhoto && (
-        <div onClick={() => setViewingPhoto(null)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <button onClick={() => setViewingPhoto(null)}
-            style={{ position: "absolute", top: 20, right: 20, width: 40, height: 40, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.15)", color: WHITE, fontSize: 20, cursor: "pointer" }}>
+      {viewingIndex !== null && photos[viewingIndex] && (
+        <div onClick={() => setViewingIndex(null)} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20, touchAction: "pan-y" }}>
+          <button onClick={() => setViewingIndex(null)}
+            style={{ position: "absolute", top: 20, right: 20, width: 40, height: 40, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.15)", color: WHITE, fontSize: 20, cursor: "pointer", zIndex: 1 }}>
             ✕
           </button>
-          <img src={viewingPhoto.photo_url} alt="" onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: "100%", maxHeight: "80vh", objectFit: "contain", borderRadius: 8 }} />
+
+          {photos.length > 1 && (
+            <span style={{ position: "absolute", top: 28, left: "50%", transform: "translateX(-50%)", color: "rgba(255,255,255,0.6)", fontSize: 13, fontWeight: 700 }}>
+              {viewingIndex + 1} / {photos.length}
+            </span>
+          )}
+
+          {viewingIndex > 0 && (
+            <button onClick={(e) => { e.stopPropagation(); showPrev(); }}
+              style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", width: 44, height: 44, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.15)", color: WHITE, fontSize: 22, cursor: "pointer", display: "none" }}
+              className="lightbox-arrow">
+              ‹
+            </button>
+          )}
+          {viewingIndex < photos.length - 1 && (
+            <button onClick={(e) => { e.stopPropagation(); showNext(); }}
+              style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", width: 44, height: 44, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.15)", color: WHITE, fontSize: 22, cursor: "pointer", display: "none" }}
+              className="lightbox-arrow">
+              ›
+            </button>
+          )}
+
+          <img src={photos[viewingIndex].photo_url} alt="" onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "100%", maxHeight: "80vh", objectFit: "contain", borderRadius: 8, userSelect: "none" }} />
           <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12 }}>
-            {viewingPhoto.uploaded_by && (
-              <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 13 }}>Uploaded by {viewingPhoto.uploaded_by}</span>
+            {photos[viewingIndex].uploaded_by && (
+              <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 13 }}>Uploaded by {photos[viewingIndex].uploaded_by}</span>
             )}
-            {playerId && viewingPhoto.uploaded_by_player_id === playerId && (
-              <button onClick={() => deletePhoto(viewingPhoto)}
+            {playerId && photos[viewingIndex].uploaded_by_player_id === playerId && (
+              <button onClick={() => deletePhoto(photos[viewingIndex])}
                 style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#ef4444", color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: 800 }}>
                 🗑 Delete
               </button>
@@ -150,6 +196,16 @@ export default function GalleryPage() {
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        @media (hover: hover) and (pointer: fine) {
+          .lightbox-arrow {
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+          }
+        }
+      `}</style>
     </main>
   );
 }
