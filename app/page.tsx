@@ -20,11 +20,6 @@ function calcRelativeHandicap(handicap: number, lowest: number) {
   return Math.max(0, Math.round(handicap - lowest));
 }
 
-function getStrokesReceived(hcp: number, si: number | null) {
-  if (!si) return 0;
-  return Math.floor(hcp / 18) + (si <= (hcp % 18) ? 1 : 0);
-}
-
 export default function Home() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -125,10 +120,7 @@ export default function Home() {
       const { data: roundData } = await supabase.from("rounds").select("id, name, scorecard_key, sort_order").eq("trip_id", tripId).order("sort_order");
       setRounds(roundData ?? []);
 
-      // Unread social feed count: posts from other players, plus any automatic
-      // achievement/roundup posts (even ones triggered by this player's own scoring),
-      // since this player last viewed the feed. Own manual posts stay excluded.
-      // A never-viewed feed (null) counts everything currently posted as unread.
+      // Unread feed count
       const { count } = await supabase
         .from("posts")
         .select("id", { count: "exact", head: true })
@@ -137,32 +129,50 @@ export default function Home() {
         .or(`player_id.neq.${meData.id},post_type.eq.auto,post_type.eq.roundup`);
       setUnreadFeedCount(count ?? 0);
 
-      // Leaderboard teaser: same scoring logic as the full /leaderboard page, trimmed to the top 3.
+      // Leaderboard teaser — live scoring including low round and team points
       const { data: allTripPlayers } = await supabase.from("players").select("id, name, base_handicap, avatar").eq("trip_id", tripId);
       const { data: scoresData } = await supabase.from("hole_scores").select("hole_no, strokes, player_id, round_id");
       const { data: holesData } = await supabase.from("scorecard_holes").select("hole_no, par, stroke_index, scorecard_key");
+      const { data: teamsData } = await supabase.from("teams").select("id, name, round_id");
+      const { data: teamPlayersData } = await supabase.from("team_players").select("team_id, player_id");
 
-      if (allTripPlayers && roundData && scoresData && holesData) {
+      if (allTripPlayers && roundData && scoresData && holesData && teamsData && teamPlayersData) {
         const lowest = Math.min(...allTripPlayers.map((p) => p.base_handicap ?? 0));
+
+        const getSR = (mHcp: number, si: number | null, holeNo: number, is27: boolean) => {
+          if (!si) return 0;
+          if (is27) {
+            const nineGroup = holeNo <= 9 ? 0 : holeNo <= 18 ? 1 : 2;
+            const fullRounds = Math.floor(mHcp / 3);
+            const remainder = mHcp % 3;
+            if (si <= fullRounds) return 1;
+            if (si === fullRounds + 1 && nineGroup < remainder) return 1;
+            return 0;
+          }
+          return Math.floor(mHcp / 18) + (si <= (mHcp % 18) ? 1 : 0);
+        };
 
         const ranked: TopPlayer[] = allTripPlayers.map((player) => {
           const hcp = calcRelativeHandicap(player.base_handicap ?? 0, lowest);
           let total = 0;
 
           roundData.forEach((round) => {
-            const isSC = round.scorecard_key === "Sand Creek Course::Par 3";
+            const isSC = round.scorecard_key.includes("Sand Creek") || round.scorecard_key.includes("Par 3");
             const roundHoles = holesData.filter((h) => h.scorecard_key === round.scorecard_key);
+            const is27 = roundHoles.length === 27;
             const playerScores = scoresData.filter((s) => s.player_id === player.id && s.round_id === round.id);
             if (playerScores.length === 0) return;
 
             let pts = 0;
+
+            // Net birdie/eagle/HIO
             playerScores.forEach((score) => {
               const hole = roundHoles.find((h) => h.hole_no === score.hole_no);
               if (!hole) return;
               if (isSC) {
                 if (score.strokes === hole.par - 1) pts += 1;
               } else {
-                const sr = getStrokesReceived(hcp, hole.stroke_index);
+                const sr = getSR(hcp, hole.stroke_index, score.hole_no, is27);
                 const diff = score.strokes - sr - hole.par;
                 if (score.strokes === 1) pts += 5;
                 else if (diff <= -2) pts += 3;
@@ -170,14 +180,16 @@ export default function Home() {
               }
             });
 
+            // Sand Creek bonus
             if (isSC) {
               const t = playerScores.reduce((s, x) => s + x.strokes, 0);
               if (playerScores.length === 9 && t <= 27) pts += 1;
             }
 
+            // Live low gross round points
             const allTotals = allTripPlayers.map((p) => {
               const ps = scoresData.filter((s) => s.player_id === p.id && s.round_id === round.id);
-              if (ps.length < roundHoles.length) return null;
+              if (ps.length === 0) return null;
               return { id: p.id, total: ps.reduce((s, x) => s + x.strokes, 0) };
             }).filter(Boolean) as { id: string; total: number }[];
 
@@ -200,10 +212,43 @@ export default function Home() {
               }
             }
 
+            // Live team points
+            if (!isSC) {
+              const roundTeams = teamsData.filter(t => t.round_id === round.id);
+              if (roundTeams.length > 0) {
+                const teamStandings = roundTeams.map(team => {
+                  const memberIds = teamPlayersData.filter(tp => tp.team_id === team.id).map(tp => tp.player_id);
+                  const members = allTripPlayers.filter(p => memberIds.includes(p.id));
+                  let bestBallTotal = 0;
+                  let holesPlayed = 0;
+                  roundHoles.forEach(hole => {
+                    const netScores = members.map(member => {
+                      const score = scoresData.find(s => s.player_id === member.id && s.hole_no === hole.hole_no && s.round_id === round.id);
+                      if (!score) return null;
+                      const mHcp = calcRelativeHandicap(member.base_handicap ?? 0, lowest);
+                      const sr = getSR(mHcp, hole.stroke_index, hole.hole_no, is27);
+                      return score.strokes - sr;
+                    }).filter((s): s is number => s !== null);
+                    if (netScores.length > 0) { bestBallTotal += Math.min(...netScores); holesPlayed++; }
+                  });
+                  const isMember = memberIds.includes(player.id);
+                  return { bestBallTotal, holesPlayed, isMember };
+                }).filter(t => t.holesPlayed > 0)
+                  .sort((a, b) => a.bestBallTotal - b.bestBallTotal);
+
+                if (teamStandings.length > 0) {
+                  const pm: Record<number, number> = { 0: 3, 1: 2, 2: 1 };
+                  teamStandings.forEach((entry, index) => {
+                    if (entry.isMember) pts += pm[index] ?? 0;
+                  });
+                }
+              }
+            }
+
             total += pts;
           });
 
-          return { id: player.id, name: player.name, avatar: player.avatar, totalPoints: total };
+          return { id: player.id, name: player.name, avatar: player.avatar ?? null, totalPoints: total };
         });
 
         ranked.sort((a, b) => b.totalPoints - a.totalPoints);
@@ -229,10 +274,7 @@ export default function Home() {
         position: "relative",
         overflow: "hidden",
       }}>
-        {/* Background pattern */}
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.05, backgroundImage: "repeating-linear-gradient(45deg, #fff 0, #fff 1px, transparent 0, transparent 50%)", backgroundSize: "20px 20px" }} />
-
-        {/* Circular logo */}
         <div style={{
           width: 100, height: 100, borderRadius: "50%",
           border: `3px solid ${GOLD}`,
@@ -247,7 +289,6 @@ export default function Home() {
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
         </div>
-
         <h1 style={{ color: WHITE, fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: 2, textTransform: "uppercase" }}>The Bob Classic</h1>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 6 }}>
           <div style={{ height: 1, width: 40, background: GOLD, opacity: 0.6 }} />
@@ -268,7 +309,6 @@ export default function Home() {
             <p style={{ color: GRAY, marginBottom: 24, fontSize: 14 }}>
               {otpSent ? "Enter the 6-digit code sent to your email." : "Sign in to access your scorecard and leaderboard."}
             </p>
-
             {!otpSent ? (
               <>
                 <input
