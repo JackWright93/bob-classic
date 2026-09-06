@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -19,7 +19,7 @@ const GOLD = "#c9a84c";
 const WHITE = "#ffffff";
 const GRAY = "#9ca3af";
 const RED = "#cc0000";
-const BG = "#ffffff";
+const BG = "#134d2b";
 const LIGHT_GREEN = "#e8f5ee";
 
 function calcRelativeHandicap(handicap: number, lowestHandicap: number) {
@@ -29,24 +29,6 @@ function calcRelativeHandicap(handicap: number, lowestHandicap: number) {
 function getStrokesReceived(relativeHandicap: number, strokeIndex: number | null) {
   if (!strokeIndex) return 0;
   return Math.floor(relativeHandicap / 18) + (strokeIndex <= (relativeHandicap % 18) ? 1 : 0);
-}
-
-type Achievement = "hole_in_one" | "eagle" | "birdie" | null;
-
-function getAchievement(strokes: number | null, par: number, strokeIndex: number | null, relativeHandicap: number, sandCreek: boolean): Achievement {
-  if (strokes === null) return null;
-  if (strokes === 1) return "hole_in_one";
-  if (sandCreek) {
-    const diff = strokes - par;
-    if (diff <= -2) return "eagle";
-    if (diff === -1) return "birdie";
-    return null;
-  }
-  const strokesReceived = getStrokesReceived(relativeHandicap, strokeIndex);
-  const diff = (strokes - strokesReceived) - par;
-  if (diff <= -2) return "eagle";
-  if (diff === -1) return "birdie";
-  return null;
 }
 
 function RoundPageInner() {
@@ -59,11 +41,8 @@ function RoundPageInner() {
   const [roundName, setRoundName] = useState("");
   const [scorecardKey, setScorecardKey] = useState("");
   const [playerId, setPlayerId] = useState<string | null>(null);
-  const [tripId, setTripId] = useState<string | null>(null);
-  const [playerName, setPlayerName] = useState<string | null>(null);
   const [holes, setHoles] = useState<Hole[]>([]);
   const [scores, setScores] = useState<HoleScore[]>([]);
-  const [savedScores, setSavedScores] = useState<Record<number, number | null>>({});
   const [saving, setSaving] = useState<number | null>(null);
   const [specialHoles, setSpecialHoles] = useState<SpecialHoleType[]>([]);
   const [specialAwards, setSpecialAwards] = useState<SpecialAward[]>([]);
@@ -71,7 +50,7 @@ function RoundPageInner() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamPlayers, setTeamPlayers] = useState<TeamPlayer[]>([]);
   const [allScores, setAllScores] = useState<AllScore[]>([]);
-  const [activeTab, setActiveTab] = useState<"score" | "team" | "individual">("score");
+  const [activeTab, setActiveTab] = useState<"score" | "team" | "individual" | "mystrokes">("score");
 
   const isSandCreek = scorecardKey === "Sand Creek Course::Par 3";
 
@@ -88,11 +67,9 @@ function RoundPageInner() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push("/"); return; }
 
-      const { data: playerData } = await supabase.from("players").select("id, base_handicap, trip_id, name").eq("auth_user_id", session.user.id).maybeSingle();
+      const { data: playerData } = await supabase.from("players").select("id, base_handicap").eq("auth_user_id", session.user.id).maybeSingle();
       if (!playerData) { setError("Player not found."); setLoading(false); return; }
       setPlayerId(playerData.id);
-      setTripId(playerData.trip_id);
-      setPlayerName(playerData.name);
 
       const { data: roundData } = await supabase.from("rounds").select("name, scorecard_key").eq("id", roundId).maybeSingle();
       if (!roundData) { setError("Round not found."); setLoading(false); return; }
@@ -108,7 +85,6 @@ function RoundPageInner() {
         strokes: existingScores?.find((s) => s.hole_no === h.hole_no)?.strokes ?? null,
       }));
       setScores(scoreMap);
-      setSavedScores(Object.fromEntries(scoreMap.map((s) => [s.hole_no, s.strokes])));
 
       const { data: shData } = await supabase.from("special_holes").select("hole_no, type").eq("round_id", roundId);
       setSpecialHoles(shData ?? []);
@@ -138,74 +114,67 @@ function RoundPageInner() {
     return () => { supabase.removeChannel(channel); };
   }, [roundId]);
 
-  const adjustScore = (holeNo: number, newStrokes: number) => {
-    if (newStrokes < 1) return;
-    setScores((prev) => prev.map((s) => s.hole_no === holeNo ? { ...s, strokes: newStrokes } : s));
+  const checkAndAutoPost = async (holeNo: number, strokes: number) => {
+    if (!playerId || !roundId) return;
+    const hole = holes.find(h => h.hole_no === holeNo);
+    if (!hole) return;
+    const { data: playerInfo } = await supabase.from("players").select("name, base_handicap, trip_id").eq("id", playerId).maybeSingle();
+    if (!playerInfo) return;
+    const lowestHcp = Math.min(...players.map(p => p.base_handicap ?? 0));
+    const relHcp = calcRelativeHandicap(playerInfo.base_handicap ?? 0, lowestHcp);
+    const strokesReceived = !isSandCreek ? getStrokesReceived(relHcp, hole.stroke_index) : 0;
+    const netScore = strokes - strokesReceived;
+    const diff = netScore - hole.par;
+    let autoMessage: string | null = null;
+    if (strokes === 1) {
+      autoMessage = `🎯 HOLE IN ONE! ${playerInfo.name} just made a hole in one on hole ${holeNo}!!!`;
+    } else if (diff <= -2) {
+      autoMessage = `🦅 EAGLE! ${playerInfo.name} just made a net eagle on hole ${holeNo}!`;
+    } else if (diff === -1) {
+      autoMessage = `🐦 BIRDIE! ${playerInfo.name} just made a net birdie on hole ${holeNo}!`;
+    }
+    if (diff === 0) {
+      const recentScores = scores.filter(s => s.strokes !== null && s.hole_no < holeNo).sort((a, b) => b.hole_no - a.hole_no).slice(0, 4);
+      if (recentScores.length === 4) {
+        const allPars = recentScores.every(s => {
+          const h = holes.find(h => h.hole_no === s.hole_no);
+          if (!h || s.strokes === null) return false;
+          const sr = !isSandCreek ? getStrokesReceived(relHcp, h.stroke_index) : 0;
+          return (s.strokes - sr) - h.par === 0;
+        });
+        if (allPars) autoMessage = `🚂 PAR TRAIN! ${playerInfo.name} just made 5 pars in a row!`;
+      }
+    }
+    if (autoMessage) {
+      await supabase.from("posts").insert({ player_id: playerId, trip_id: playerInfo.trip_id, content: autoMessage, post_type: "auto" });
+    }
+    if (isSandCreek) {
+      const allNineScores = [...scores.filter(s => s.strokes !== null && s.hole_no !== holeNo), { hole_no: holeNo, strokes }];
+      if (allNineScores.length === 9) {
+        const total = allNineScores.reduce((sum, s) => sum + (s.strokes ?? 0), 0);
+        if (total >= 30 && total <= 39) {
+          await supabase.from("posts").insert({ player_id: playerId, trip_id: playerInfo.trip_id, content: `🔥 ${playerInfo.name} shot a ${total} on the par 3 course — in the 30s!`, post_type: "auto" });
+        }
+      }
+    }
   };
 
-  const submitScore = async (holeNo: number) => {
-    if (!playerId || !roundId) return;
-    const hole = holes.find((h) => h.hole_no === holeNo);
-    const newStrokes = scores.find((s) => s.hole_no === holeNo)?.strokes ?? null;
-    if (newStrokes === null || newStrokes < 1) return;
-    const prevStrokes = savedScores[holeNo] ?? null;
-
+  const updateScore = async (holeNo: number, newStrokes: number) => {
+    if (!playerId || !roundId || newStrokes < 1) return;
+    setScores((prev) => prev.map((s) => s.hole_no === holeNo ? { ...s, strokes: newStrokes } : s));
     setSaving(holeNo);
     await supabase.from("hole_scores").upsert(
       { round_id: roundId, player_id: playerId, hole_no: holeNo, strokes: newStrokes },
       { onConflict: "round_id,player_id,hole_no" }
     );
     setSaving(null);
-    setSavedScores((prev) => ({ ...prev, [holeNo]: newStrokes }));
+    await checkAndAutoPost(holeNo, newStrokes);
     loadAllScores();
-
-    // Auto-post to the live feed only on explicit submit, and only when this hole
-    // newly becomes a birdie, eagle, or hole-in-one (not already posted for this hole).
-    if (hole && tripId && playerName) {
-      const prevAchievement = getAchievement(prevStrokes, hole.par, hole.stroke_index, relativeHandicap, isSandCreek);
-      const newAchievement = getAchievement(newStrokes, hole.par, hole.stroke_index, relativeHandicap, isSandCreek);
-      if (newAchievement && newAchievement !== prevAchievement) {
-        const achievementText =
-          newAchievement === "hole_in_one" ? "a HOLE-IN-ONE 🎯" :
-          newAchievement === "eagle" ? "an EAGLE 🦅" :
-          "a BIRDIE 🐦";
-        await supabase.from("posts").insert({
-          player_id: playerId,
-          trip_id: tripId,
-          content: `${playerName} made ${achievementText} on Hole ${holeNo}! ⛳`,
-          post_type: "auto",
-        });
-      }
-    }
-
-    // Par Train: post once when a player reaches exactly 4 gross pars in a row.
-    // "Par" here is gross strokes == hole par, the standard golf meaning (not net).
-    if (hole && tripId && playerName && newStrokes === hole.par) {
-      const updatedSaved = { ...savedScores, [holeNo]: newStrokes };
-      let streak = 0;
-      let h = holeNo;
-      while (true) {
-        const streakHole = holes.find((x) => x.hole_no === h);
-        const streakStrokes = updatedSaved[h];
-        if (!streakHole || streakStrokes == null || streakStrokes !== streakHole.par) break;
-        streak++;
-        h--;
-      }
-      if (streak === 4) {
-        await supabase.from("posts").insert({
-          player_id: playerId,
-          trip_id: tripId,
-          content: `${playerName} is on a PAR TRAIN 🚂 — 4 pars in a row!`,
-          post_type: "auto",
-        });
-      }
-    }
   };
 
   const clearScore = async (holeNo: number) => {
     if (!playerId || !roundId) return;
     setScores((prev) => prev.map((s) => s.hole_no === holeNo ? { ...s, strokes: null } : s));
-    setSavedScores((prev) => ({ ...prev, [holeNo]: null }));
     await supabase.from("hole_scores").delete().eq("round_id", roundId).eq("player_id", playerId).eq("hole_no", holeNo);
     loadAllScores();
   };
@@ -221,18 +190,7 @@ function RoundPageInner() {
     const others = specialAwards.filter((a) => a.hole_no === holeNo && a.type === type);
     for (const o of others) await supabase.from("special_awards").delete().eq("id", o.id);
     const { data } = await supabase.from("special_awards").insert({ round_id: roundId, hole_no: holeNo, player_id: playerId, type, confirmed: false }).select().single();
-    if (data) {
-      setSpecialAwards((prev) => [...prev.filter((a) => !(a.hole_no === holeNo && a.type === type)), data]);
-      if (tripId && playerName) {
-        const awardText = type === "longest_drive" ? "🚗 LONGEST DRIVE" : "📍 CLOSEST TO PIN";
-        await supabase.from("posts").insert({
-          player_id: playerId,
-          trip_id: tripId,
-          content: `${playerName} claimed ${awardText} on Hole ${holeNo}! ⛳`,
-          post_type: "auto",
-        });
-      }
-    }
+    if (data) setSpecialAwards((prev) => [...prev.filter((a) => !(a.hole_no === holeNo && a.type === type)), data]);
   };
 
   const getScoreLabel = (strokes: number | null, par: number, strokeIndex: number | null, handicap: number) => {
@@ -248,7 +206,7 @@ function RoundPageInner() {
     return { label: `+${diff}`, color: WHITE, bg: "#991b1b", border: "#991b1b" };
   };
 
-  const getTeamLeaderboard = (holesSubset: Hole[] = holes) => {
+  const getTeamLeaderboard = () => {
     if (!teams.length || !players.length) return [];
     const lowestHandicap = Math.min(...players.map((p) => p.base_handicap ?? 0));
     return teams.map((team) => {
@@ -256,7 +214,7 @@ function RoundPageInner() {
       const members = players.filter((p) => memberIds.includes(p.id));
       let bestBallTotal = 0;
       let holesPlayed = 0;
-      holesSubset.forEach((hole) => {
+      holes.forEach((hole) => {
         const netScores = members.map((member) => {
           const score = allScores.find((s) => s.player_id === member.id && s.hole_no === hole.hole_no);
           if (!score) return null;
@@ -282,134 +240,6 @@ function RoundPageInner() {
     }).filter((p) => p.holesPlayed > 0).sort((a, b) => a.total - b.total);
   };
 
-  const postRoundup = async () => {
-    if (!tripId || !playerId) return;
-    const medal = (i: number) => (i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉");
-
-    const teamLb = getTeamLeaderboard().filter((e) => e.holesPlayed > 0).slice(0, 3);
-    const indivLb = getIndividualRoundLeaderboard().slice(0, 3);
-    const ldAward = specialAwards.find((a) => a.type === "longest_drive");
-    const ctpAward = specialAwards.find((a) => a.type === "closest_to_pin");
-    const ldPlayer = ldAward ? players.find((p) => p.id === ldAward.player_id)?.name : null;
-    const ctpPlayer = ctpAward ? players.find((p) => p.id === ctpAward.player_id)?.name : null;
-
-    const lines: string[] = [`🏆 ${roundName.toUpperCase()} ROUNDUP 🏆`];
-
-    if (teamLb.length > 0) {
-      lines.push("", "TEAM STANDINGS (Net Best Ball):");
-      teamLb.forEach((entry, i) => {
-        const parTotal = holes
-          .filter((h) => allScores.some((s) => entry.members.some((m) => s.player_id === m.id && s.hole_no === h.hole_no)))
-          .reduce((sum, h) => sum + h.par, 0);
-        const diff = entry.bestBallTotal - parTotal;
-        const diffStr = diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`;
-        lines.push(`${medal(i)} ${entry.team.name} — ${diffStr}`);
-      });
-    }
-
-    if (indivLb.length > 0) {
-      lines.push("", "TOP INDIVIDUAL SCORES (Gross):");
-      indivLb.forEach((entry, i) => {
-        lines.push(`${medal(i)} ${entry.player.name} — ${entry.total}`);
-      });
-    }
-
-    if (ldPlayer || ctpPlayer) {
-      lines.push("");
-      if (ldPlayer) lines.push(`🚗 Longest Drive: ${ldPlayer}`);
-      if (ctpPlayer) lines.push(`📍 Closest to Pin: ${ctpPlayer}`);
-    }
-
-    await supabase.from("posts").insert({
-      player_id: playerId,
-      trip_id: tripId,
-      content: lines.join("\n"),
-      post_type: "roundup",
-    });
-  };
-
-  const roundupCheckedRef = useRef(false);
-
-  useEffect(() => {
-    if (isSandCreek) return; // Sand Creek is excluded from roundups per trip rules
-    if (roundupCheckedRef.current) return;
-    if (!roundId || !tripId || !playerId || holes.length === 0 || players.length === 0) return;
-
-    const participantIds = teams.length > 0
-      ? Array.from(new Set(teamPlayers.map((tp) => tp.player_id)))
-      : players.map((p) => p.id);
-    if (participantIds.length === 0) return;
-
-    const allComplete = participantIds.every((pid) => allScores.filter((s) => s.player_id === pid).length === holes.length);
-    if (!allComplete) return;
-
-    roundupCheckedRef.current = true;
-
-    (async () => {
-      // Guard against duplicate roundups if multiple devices finish around the same time
-      const marker = `${roundName.toUpperCase()} ROUNDUP`;
-      const { data: existing } = await supabase
-        .from("posts")
-        .select("id")
-        .eq("trip_id", tripId)
-        .eq("post_type", "roundup")
-        .ilike("content", `%${marker}%`)
-        .limit(1);
-      if (existing && existing.length > 0) return;
-      await postRoundup();
-    })();
-  }, [allScores, teams, teamPlayers, players, holes, roundId, tripId, playerId, isSandCreek, roundName]);
-
-  // "At the turn": post each team's front-nine (holes 1-9) net best ball score once
-  // every member of that team has finished all 9. Only applies to rounds with a back
-  // nine (Sand Creek's 9-hole round has no "turn" to speak of).
-  const turnCheckedTeamsRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (!roundId || !tripId || !playerId) return;
-    const frontNine = holes.filter((h) => h.hole_no <= 9);
-    if (frontNine.length < 9 || holes.length <= 9) return;
-    if (teams.length === 0) return;
-
-    teams.forEach((team) => {
-      if (turnCheckedTeamsRef.current.has(team.id)) return;
-      const memberIds = teamPlayers.filter((tp) => tp.team_id === team.id).map((tp) => tp.player_id);
-      if (memberIds.length === 0) return;
-
-      const frontNineComplete = memberIds.every(
-        (pid) => allScores.filter((s) => s.player_id === pid && s.hole_no <= 9).length === 9
-      );
-      if (!frontNineComplete) return;
-
-      turnCheckedTeamsRef.current.add(team.id);
-
-      (async () => {
-        const marker = `${roundName}: ${team.name} is`;
-        const { data: existing } = await supabase
-          .from("posts")
-          .select("id")
-          .eq("trip_id", tripId)
-          .eq("post_type", "auto")
-          .ilike("content", `%${marker}%`)
-          .limit(1);
-        if (existing && existing.length > 0) return;
-
-        const [teamFrontNine] = getTeamLeaderboard(frontNine).filter((e) => e.team.id === team.id);
-        if (!teamFrontNine) return;
-        const parTotal = frontNine.reduce((sum, h) => sum + h.par, 0);
-        const diff = teamFrontNine.bestBallTotal - parTotal;
-        const diffStr = diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`;
-
-        await supabase.from("posts").insert({
-          player_id: playerId,
-          trip_id: tripId,
-          content: `⛳ ${marker} ${diffStr} at the turn!`,
-          post_type: "auto",
-        });
-      })();
-    });
-  }, [allScores, teams, teamPlayers, holes, roundId, tripId, playerId, roundName]);
-
   const totalStrokes = scores.reduce((sum, s) => sum + (s.strokes ?? 0), 0);
   const holesCompleted = scores.filter((s) => s.strokes !== null).length;
   const myHandicap = players.find((p) => p.id === playerId)?.base_handicap ?? 0;
@@ -417,11 +247,11 @@ function RoundPageInner() {
   const relativeHandicap = calcRelativeHandicap(myHandicap, lowestHandicap);
   const teamLeaderboard = getTeamLeaderboard();
   const individualLeaderboard = getIndividualRoundLeaderboard();
+  const strokeHoles = holes.filter(h => getStrokesReceived(relativeHandicap, h.stroke_index) > 0);
 
   return (
     <main style={{ minHeight: "100vh", background: BG, fontFamily: "Arial, sans-serif" }}>
 
-      {/* Header */}
       <div style={{ background: `linear-gradient(160deg, ${DARK_GREEN} 0%, #1a5c32 100%)`, padding: "16px 20px 20px", position: "relative", borderBottom: `2px solid ${GOLD}44` }}>
         <button onClick={() => router.push("/")} style={{ background: "none", border: "none", color: GOLD, fontSize: 20, cursor: "pointer", padding: 0, position: "absolute", top: 18, left: 16 }}>←</button>
         <div style={{ textAlign: "center" }}>
@@ -440,10 +270,14 @@ function RoundPageInner() {
             <div style={{ display: "flex", gap: 6, marginBottom: 16, background: `${DARK_GREEN}cc`, borderRadius: 14, padding: 4, border: `1px solid ${GOLD}44` }}>
               {[
                 { key: "score", label: "MY SCORE" },
-                ...(!isSandCreek ? [{ key: "team", label: "TEAMS" }, { key: "individual", label: "INDIVIDUAL" }] : [])
+                ...(!isSandCreek ? [
+                  { key: "mystrokes", label: "MY STROKES" },
+                  { key: "team", label: "TEAMS" },
+                  { key: "individual", label: "INDIVIDUAL" }
+                ] : [])
               ].map((tab) => (
                 <button key={tab.key} onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                  style={{ flex: 1, padding: "9px 4px", borderRadius: 10, border: "none", background: activeTab === tab.key ? `linear-gradient(135deg, ${GOLD}, #a8853a)` : "transparent", color: activeTab === tab.key ? DARK_GREEN : GOLD, cursor: "pointer", fontSize: 11, fontWeight: 900, letterSpacing: 0.5 }}>
+                  style={{ flex: 1, padding: "9px 2px", borderRadius: 10, border: "none", background: activeTab === tab.key ? `linear-gradient(135deg, ${GOLD}, #a8853a)` : "transparent", color: activeTab === tab.key ? DARK_GREEN : GOLD, cursor: "pointer", fontSize: 10, fontWeight: 900, letterSpacing: 0.5 }}>
                   {tab.label}
                 </button>
               ))}
@@ -464,7 +298,7 @@ function RoundPageInner() {
                   {holes.map((hole) => {
                     const score = scores.find((s) => s.hole_no === hole.hole_no);
                     const strokes = score?.strokes ?? null;
-                    const isDirty = strokes !== null && strokes !== (savedScores[hole.hole_no] ?? null);
+                    const isStrokeHole = !isSandCreek && getStrokesReceived(relativeHandicap, hole.stroke_index) > 0;
                     const label = !isSandCreek
                       ? getScoreLabel(strokes, hole.par, hole.stroke_index, relativeHandicap)
                       : strokes !== null
@@ -474,17 +308,22 @@ function RoundPageInner() {
                         : null;
 
                     return (
-                      <div key={hole.hole_no} style={{ background: WHITE, borderRadius: 14, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.15)", border: label ? `2px solid ${label.border}` : `2px solid ${GOLD}44` }}>
+                      <div key={hole.hole_no} style={{ background: WHITE, borderRadius: 14, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.15)", border: label ? `2px solid ${label.border}` : isStrokeHole ? `2px solid ${GOLD}` : `2px solid ${GOLD}44` }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: label && label.bg !== "#e8f5ee" ? label.bg : GOLD }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                             <div style={{ width: 32, height: 32, borderRadius: 8, background: DARK_GREEN, display: "flex", alignItems: "center", justifyContent: "center", color: GOLD, fontSize: 14, fontWeight: 900 }}>
                               {hole.hole_no}
                             </div>
                             <div>
-                              <span style={{ fontSize: 13, fontWeight: 800, color: label && label.bg !== "#e8f5ee" && label.bg !== GOLD ? label.color : DARK_GREEN }}>PAR {hole.par}</span>
-                              {!isSandCreek && hole.stroke_index && (
-                                <span style={{ marginLeft: 8, fontSize: 11, color: label && label.bg !== "#e8f5ee" && label.bg !== GOLD ? "rgba(255,255,255,0.8)" : `${DARK_GREEN}99`, fontWeight: 700 }}>SI {hole.stroke_index}</span>
-                              )}
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 13, fontWeight: 800, color: label && label.bg !== "#e8f5ee" && label.bg !== GOLD ? label.color : DARK_GREEN }}>PAR {hole.par}</span>
+                                {!isSandCreek && hole.stroke_index && (
+                                  <span style={{ fontSize: 11, color: label && label.bg !== "#e8f5ee" && label.bg !== GOLD ? "rgba(255,255,255,0.8)" : `${DARK_GREEN}99`, fontWeight: 700 }}>SI {hole.stroke_index}</span>
+                                )}
+                                {isStrokeHole && (
+                                  <span style={{ fontSize: 10, fontWeight: 900, color: DARK_GREEN, background: WHITE, borderRadius: 4, padding: "2px 6px", letterSpacing: 0.5 }}>⭐ STROKE HOLE</span>
+                                )}
+                              </div>
                             </div>
                           </div>
                           {label && (
@@ -494,27 +333,18 @@ function RoundPageInner() {
 
                         <div style={{ padding: "12px 14px", background: WHITE }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-                            <button onClick={() => adjustScore(hole.hole_no, (strokes ?? hole.par) - 1)}
+                            <button onClick={() => updateScore(hole.hole_no, (strokes ?? hole.par) - 1)}
                               style={{ width: 48, height: 52, borderRadius: "12px 0 0 12px", border: `2px solid ${GOLD}66`, borderRight: "none", fontSize: 26, cursor: "pointer", background: "#fffbeb", color: DARK_GREEN, fontWeight: 900 }}>−</button>
                             <div style={{ flex: 1, height: 52, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${GOLD}66`, background: WHITE, fontSize: 28, fontWeight: 900, color: "#111" }}>
                               {saving === hole.hole_no ? "·" : strokes ?? "—"}
                             </div>
-                            <button onClick={() => adjustScore(hole.hole_no, (strokes ?? hole.par - 1) + 1)}
+                            <button onClick={() => updateScore(hole.hole_no, (strokes ?? hole.par - 1) + 1)}
                               style={{ width: 48, height: 52, borderRadius: "0 12px 12px 0", border: `2px solid ${GOLD}66`, borderLeft: "none", fontSize: 26, cursor: "pointer", background: "#fffbeb", color: DARK_GREEN, fontWeight: 900 }}>+</button>
-                            {isDirty && (
-                              <button onClick={() => submitScore(hole.hole_no)} disabled={saving === hole.hole_no}
-                                style={{ width: 44, height: 44, borderRadius: 10, border: `2px solid ${GREEN}`, background: GREEN, color: WHITE, cursor: saving === hole.hole_no ? "default" : "pointer", fontSize: 18, marginLeft: 8, fontWeight: 900 }}>
-                                {saving === hole.hole_no ? "·" : "✓"}
-                              </button>
-                            )}
-                            {strokes !== null && !isDirty && (
+                            {strokes !== null && (
                               <button onClick={() => clearScore(hole.hole_no)}
                                 style={{ width: 38, height: 38, borderRadius: 10, border: "2px solid #fee2e2", background: "#fee2e2", color: "#ef4444", cursor: "pointer", fontSize: 14, marginLeft: 8, fontWeight: 900 }}>✕</button>
                             )}
                           </div>
-                          {isDirty && (
-                            <p style={{ margin: "8px 0 0", fontSize: 11, color: GREEN, fontWeight: 800, letterSpacing: 0.3 }}>TAP ✓ TO SUBMIT — won't post to the feed until you do</p>
-                          )}
 
                           {specialHoles.filter((sh) => sh.hole_no === hole.hole_no).map((sh) => {
                             const claimed = specialAwards.find((a) => a.hole_no === hole.hole_no && a.type === sh.type);
@@ -536,6 +366,67 @@ function RoundPageInner() {
                   })}
                 </div>
               </>
+            )}
+
+            {/* MY STROKES TAB */}
+            {activeTab === "mystrokes" && (
+              <div>
+                <div style={{ background: GOLD, borderRadius: 14, padding: "14px 16px", marginBottom: 16, boxShadow: "0 4px 12px rgba(201,168,76,0.3)" }}>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: DARK_GREEN, letterSpacing: 0.5 }}>YOUR HANDICAP STROKES</div>
+                  <div style={{ fontSize: 13, color: `${DARK_GREEN}99`, marginTop: 4, fontWeight: 700 }}>
+                    {relativeHandicap === 0
+                      ? "You are the baseline — no strokes received"
+                      : `You receive ${relativeHandicap} stroke${relativeHandicap !== 1 ? "s" : ""} this round`}
+                  </div>
+                </div>
+
+                {relativeHandicap === 0 ? (
+                  <div style={{ background: `${DARK_GREEN}cc`, borderRadius: 14, padding: 24, textAlign: "center", color: GOLD, border: `1px solid ${GOLD}44` }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>🏌️</div>
+                    <div style={{ fontWeight: 900, letterSpacing: 1 }}>NO STROKES — YOU'RE THE BASELINE</div>
+                  </div>
+                ) : (
+                  <>
+                    <p style={{ fontSize: 12, color: GOLD, marginBottom: 12, fontWeight: 700, letterSpacing: 1 }}>⭐ HOLES WHERE YOU GET A STROKE</p>
+                    <div style={{ display: "grid", gap: 8, marginBottom: 20 }}>
+                      {strokeHoles.sort((a, b) => a.hole_no - b.hole_no).map((hole) => (
+                        <div key={hole.hole_no} style={{ background: WHITE, borderRadius: 12, overflow: "hidden", border: `2px solid ${GOLD}` }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: GOLD }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <div style={{ width: 32, height: 32, borderRadius: 8, background: DARK_GREEN, display: "flex", alignItems: "center", justifyContent: "center", color: GOLD, fontSize: 14, fontWeight: 900 }}>
+                                {hole.hole_no}
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 900, color: DARK_GREEN }}>HOLE {hole.hole_no} · PAR {hole.par}</div>
+                                <div style={{ fontSize: 11, color: `${DARK_GREEN}99`, fontWeight: 700 }}>SI {hole.stroke_index}</div>
+                              </div>
+                            </div>
+                            <div style={{ textAlign: "right" }}>
+                              <div style={{ fontSize: 11, fontWeight: 900, color: DARK_GREEN, letterSpacing: 0.5 }}>⭐ STROKE HOLE</div>
+                              <div style={{ fontSize: 11, color: `${DARK_GREEN}88`, fontWeight: 700 }}>Net par = {hole.par - 1} shots</div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <p style={{ fontSize: 12, color: `${GOLD}88`, marginBottom: 12, fontWeight: 700, letterSpacing: 1 }}>OTHER HOLES — NO STROKE</p>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {holes.filter(h => getStrokesReceived(relativeHandicap, h.stroke_index) === 0).sort((a, b) => a.hole_no - b.hole_no).map((hole) => (
+                        <div key={hole.hole_no} style={{ background: `${DARK_GREEN}55`, borderRadius: 12, padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${GOLD}22` }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ width: 28, height: 28, borderRadius: 6, background: `${DARK_GREEN}`, display: "flex", alignItems: "center", justifyContent: "center", color: `${GOLD}88`, fontSize: 12, fontWeight: 900, border: `1px solid ${GOLD}33` }}>
+                              {hole.hole_no}
+                            </div>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: `${GOLD}88` }}>HOLE {hole.hole_no} · PAR {hole.par} · SI {hole.stroke_index}</span>
+                          </div>
+                          <span style={{ fontSize: 11, color: `${GOLD}55`, fontWeight: 700 }}>NO STROKE</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             )}
 
             {/* TEAM TAB */}
