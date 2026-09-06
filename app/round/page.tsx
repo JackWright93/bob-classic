@@ -26,9 +26,23 @@ function calcRelativeHandicap(handicap: number, lowestHandicap: number) {
   return Math.max(0, Math.round(handicap - lowestHandicap));
 }
 
+// Standard 18-hole stroke calculation
 function getStrokesReceived(relativeHandicap: number, strokeIndex: number | null) {
   if (!strokeIndex) return 0;
   return Math.floor(relativeHandicap / 18) + (strokeIndex <= (relativeHandicap % 18) ? 1 : 0);
+}
+
+// 27-hole stroke calculation - distributes across SI groups (all SI 1s first, then SI 2s, etc.)
+function getStrokesReceived27(relativeHandicap: number, strokeIndex: number | null, holeNo: number) {
+  if (!strokeIndex) return 0;
+  const nineGroup = holeNo <= 9 ? 0 : holeNo <= 18 ? 1 : 2; // 0=front, 1=mid, 2=back
+  const strokesPerSI = 3; // one per 9-hole stretch
+  const fullRoundsOfSI = Math.floor(relativeHandicap / strokesPerSI);
+  const remainder = relativeHandicap % strokesPerSI;
+
+  if (strokeIndex <= fullRoundsOfSI) return 1;
+  if (strokeIndex === fullRoundsOfSI + 1 && nineGroup < remainder) return 1;
+  return 0;
 }
 
 function RoundPageInner() {
@@ -43,7 +57,9 @@ function RoundPageInner() {
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [holes, setHoles] = useState<Hole[]>([]);
   const [scores, setScores] = useState<HoleScore[]>([]);
+  const [pendingScore, setPendingScore] = useState<Record<number, number>>({});
   const [saving, setSaving] = useState<number | null>(null);
+  const [saved, setSaved] = useState<number | null>(null);
   const [specialHoles, setSpecialHoles] = useState<SpecialHoleType[]>([]);
   const [specialAwards, setSpecialAwards] = useState<SpecialAward[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -52,7 +68,13 @@ function RoundPageInner() {
   const [allScores, setAllScores] = useState<AllScore[]>([]);
   const [activeTab, setActiveTab] = useState<"score" | "team" | "individual" | "mystrokes">("score");
 
-  const isSandCreek = scorecardKey === "Sand Creek Course::Par 3";
+  const isSandCreek = scorecardKey.includes("Sand Creek") || scorecardKey.includes("Par 3");
+  const isShepherds = holes.length === 27;
+
+  const getStrokes = (relHcp: number, strokeIndex: number | null, holeNo: number) => {
+    if (isShepherds) return getStrokesReceived27(relHcp, strokeIndex, holeNo);
+    return getStrokesReceived(relHcp, strokeIndex);
+  };
 
   const loadAllScores = async () => {
     if (!roundId) return;
@@ -122,7 +144,7 @@ function RoundPageInner() {
     if (!playerInfo) return;
     const lowestHcp = Math.min(...players.map(p => p.base_handicap ?? 0));
     const relHcp = calcRelativeHandicap(playerInfo.base_handicap ?? 0, lowestHcp);
-    const strokesReceived = !isSandCreek ? getStrokesReceived(relHcp, hole.stroke_index) : 0;
+    const strokesReceived = !isSandCreek ? getStrokes(relHcp, hole.stroke_index, holeNo) : 0;
     const netScore = strokes - strokesReceived;
     const diff = netScore - hole.par;
     let autoMessage: string | null = null;
@@ -139,7 +161,7 @@ function RoundPageInner() {
         const allPars = recentScores.every(s => {
           const h = holes.find(h => h.hole_no === s.hole_no);
           if (!h || s.strokes === null) return false;
-          const sr = !isSandCreek ? getStrokesReceived(relHcp, h.stroke_index) : 0;
+          const sr = !isSandCreek ? getStrokes(relHcp, h.stroke_index, h.hole_no) : 0;
           return (s.strokes - sr) - h.par === 0;
         });
         if (allPars) autoMessage = `🚂 PAR TRAIN! ${playerInfo.name} just made 5 pars in a row!`;
@@ -159,15 +181,28 @@ function RoundPageInner() {
     }
   };
 
-  const updateScore = async (holeNo: number, newStrokes: number) => {
-    if (!playerId || !roundId || newStrokes < 1) return;
-    setScores((prev) => prev.map((s) => s.hole_no === holeNo ? { ...s, strokes: newStrokes } : s));
+  const adjustPendingScore = (holeNo: number, delta: number) => {
+    const currentScore = scores.find(s => s.hole_no === holeNo);
+    const hole = holes.find(h => h.hole_no === holeNo);
+    const base = pendingScore[holeNo] ?? currentScore?.strokes ?? (hole?.par ?? 4);
+    const newVal = Math.max(1, base + delta);
+    setPendingScore(prev => ({ ...prev, [holeNo]: newVal }));
+  };
+
+  const submitScore = async (holeNo: number) => {
+    if (!playerId || !roundId) return;
+    const newStrokes = pendingScore[holeNo];
+    if (!newStrokes) return;
     setSaving(holeNo);
+    setScores((prev) => prev.map((s) => s.hole_no === holeNo ? { ...s, strokes: newStrokes } : s));
     await supabase.from("hole_scores").upsert(
       { round_id: roundId, player_id: playerId, hole_no: holeNo, strokes: newStrokes },
       { onConflict: "round_id,player_id,hole_no" }
     );
     setSaving(null);
+    setSaved(holeNo);
+    setTimeout(() => setSaved(null), 1500);
+    setPendingScore(prev => { const n = { ...prev }; delete n[holeNo]; return n; });
     await checkAndAutoPost(holeNo, newStrokes);
     loadAllScores();
   };
@@ -175,6 +210,7 @@ function RoundPageInner() {
   const clearScore = async (holeNo: number) => {
     if (!playerId || !roundId) return;
     setScores((prev) => prev.map((s) => s.hole_no === holeNo ? { ...s, strokes: null } : s));
+    setPendingScore(prev => { const n = { ...prev }; delete n[holeNo]; return n; });
     await supabase.from("hole_scores").delete().eq("round_id", roundId).eq("player_id", playerId).eq("hole_no", holeNo);
     loadAllScores();
   };
@@ -193,9 +229,9 @@ function RoundPageInner() {
     if (data) setSpecialAwards((prev) => [...prev.filter((a) => !(a.hole_no === holeNo && a.type === type)), data]);
   };
 
-  const getScoreLabel = (strokes: number | null, par: number, strokeIndex: number | null, handicap: number) => {
+  const getScoreLabel = (strokes: number | null, par: number, strokeIndex: number | null, handicap: number, holeNo: number) => {
     if (strokes === null) return null;
-    const strokesReceived = getStrokesReceived(handicap, strokeIndex);
+    const strokesReceived = isSandCreek ? 0 : getStrokes(handicap, strokeIndex, holeNo);
     const diff = (strokes - strokesReceived) - par;
     if (strokes === 1) return { label: "HOLE IN ONE 🎯", color: DARK_GREEN, bg: GOLD, border: GOLD };
     if (diff <= -2) return { label: "EAGLE 🦅", color: DARK_GREEN, bg: GOLD, border: GOLD };
@@ -204,6 +240,27 @@ function RoundPageInner() {
     if (diff === 1) return { label: "BOGEY", color: WHITE, bg: "#f97316", border: "#f97316" };
     if (diff === 2) return { label: "DOUBLE", color: WHITE, bg: "#ef4444", border: "#ef4444" };
     return { label: `+${diff}`, color: WHITE, bg: "#991b1b", border: "#991b1b" };
+  };
+
+  // Calculate live points for individual round leaderboard
+  const calcLiveRoundPoints = (playerScores: AllScore[], playerObj: Player, allPlayersList: Player[]) => {
+    const lowestHcp = Math.min(...allPlayersList.map(p => p.base_handicap ?? 0));
+    const relHcp = calcRelativeHandicap(playerObj.base_handicap ?? 0, lowestHcp);
+    let pts = 0;
+    playerScores.forEach(score => {
+      const hole = holes.find(h => h.hole_no === score.hole_no);
+      if (!hole) return;
+      if (isSandCreek) {
+        if (score.strokes === hole.par - 1) pts += 1;
+      } else {
+        const sr = getStrokes(relHcp, hole.stroke_index, score.hole_no);
+        const diff = (score.strokes - sr) - hole.par;
+        if (score.strokes === 1) pts += 5;
+        else if (diff <= -2) pts += 3;
+        else if (diff === -1) pts += 1;
+      }
+    });
+    return pts;
   };
 
   const getTeamLeaderboard = () => {
@@ -219,16 +276,26 @@ function RoundPageInner() {
           const score = allScores.find((s) => s.player_id === member.id && s.hole_no === hole.hole_no);
           if (!score) return null;
           const relHcp = calcRelativeHandicap(member.base_handicap ?? 0, lowestHandicap);
-          return score.strokes - getStrokesReceived(relHcp, hole.stroke_index);
+          return score.strokes - getStrokes(relHcp, hole.stroke_index, hole.hole_no);
         }).filter((s): s is number => s !== null);
         if (netScores.length > 0) { bestBallTotal += Math.min(...netScores); holesPlayed++; }
       });
-      return { team, bestBallTotal, holesPlayed, members };
+
+      // Live team points
+      const teamScores = allScores.filter(s => memberIds.includes(s.player_id));
+      const holesWithScores = [...new Set(teamScores.map(s => s.hole_no))].length;
+      let livePoints = 0;
+
+      return { team, bestBallTotal, holesPlayed, members, livePoints, holesWithScores };
     }).sort((a, b) => {
       if (a.holesPlayed === 0 && b.holesPlayed === 0) return 0;
       if (a.holesPlayed === 0) return 1;
       if (b.holesPlayed === 0) return -1;
       return a.bestBallTotal - b.bestBallTotal;
+    }).map((entry, index, arr) => {
+      // Assign live team points based on current standing
+      const pointsMap: Record<number, number> = { 0: 3, 1: 2, 2: 1 };
+      return { ...entry, livePoints: pointsMap[index] ?? 0 };
     });
   };
 
@@ -236,8 +303,12 @@ function RoundPageInner() {
     return players.map((player) => {
       const playerScores = allScores.filter((s) => s.player_id === player.id);
       const total = playerScores.reduce((sum, s) => sum + s.strokes, 0);
-      return { player, total, holesPlayed: playerScores.length };
-    }).filter((p) => p.holesPlayed > 0).sort((a, b) => a.total - b.total);
+      const livePoints = calcLiveRoundPoints(playerScores, player, players);
+      return { player, total, holesPlayed: playerScores.length, livePoints };
+    }).filter((p) => p.holesPlayed > 0).sort((a, b) => a.total - b.total).map((entry, index) => {
+      const lowRoundPts = index === 0 ? 3 : index === 1 ? 2 : index === 2 ? 1 : 0;
+      return { ...entry, totalLivePoints: entry.livePoints + lowRoundPts };
+    });
   };
 
   const totalStrokes = scores.reduce((sum, s) => sum + (s.strokes ?? 0), 0);
@@ -247,11 +318,10 @@ function RoundPageInner() {
   const relativeHandicap = calcRelativeHandicap(myHandicap, lowestHandicap);
   const teamLeaderboard = getTeamLeaderboard();
   const individualLeaderboard = getIndividualRoundLeaderboard();
-  const strokeHoles = holes.filter(h => getStrokesReceived(relativeHandicap, h.stroke_index) > 0);
+  const strokeHoles = holes.filter(h => !isSandCreek && getStrokes(relativeHandicap, h.stroke_index, h.hole_no) > 0);
 
   return (
     <main style={{ minHeight: "100vh", background: BG, fontFamily: "Arial, sans-serif" }}>
-
       <div style={{ background: `linear-gradient(160deg, ${DARK_GREEN} 0%, #1a5c32 100%)`, padding: "16px 20px 20px", position: "relative", borderBottom: `2px solid ${GOLD}44` }}>
         <button onClick={() => router.push("/")} style={{ background: "none", border: "none", color: GOLD, fontSize: 20, cursor: "pointer", padding: 0, position: "absolute", top: 18, left: 16 }}>←</button>
         <div style={{ textAlign: "center" }}>
@@ -266,14 +336,13 @@ function RoundPageInner() {
 
         {!loading && !error && (
           <>
-            {/* Tabs */}
-            <div style={{ display: "flex", gap: 6, marginBottom: 16, background: `${DARK_GREEN}cc`, borderRadius: 14, padding: 4, border: `1px solid ${GOLD}44` }}>
+            <div style={{ display: "flex", gap: 4, marginBottom: 16, background: `${DARK_GREEN}cc`, borderRadius: 14, padding: 4, border: `1px solid ${GOLD}44` }}>
               {[
                 { key: "score", label: "MY SCORE" },
                 ...(!isSandCreek ? [
-                  { key: "mystrokes", label: "MY STROKES" },
+                  { key: "mystrokes", label: "STROKES" },
                   { key: "team", label: "TEAMS" },
-                  { key: "individual", label: "INDIVIDUAL" }
+                  { key: "individual", label: "INDIV." }
                 ] : [])
               ].map((tab) => (
                 <button key={tab.key} onClick={() => setActiveTab(tab.key as typeof activeTab)}
@@ -297,18 +366,20 @@ function RoundPageInner() {
                 <div style={{ display: "grid", gap: 10 }}>
                   {holes.map((hole) => {
                     const score = scores.find((s) => s.hole_no === hole.hole_no);
-                    const strokes = score?.strokes ?? null;
-                    const isStrokeHole = !isSandCreek && getStrokesReceived(relativeHandicap, hole.stroke_index) > 0;
+                    const savedStrokes = score?.strokes ?? null;
+                    const displayStrokes = pendingScore[hole.hole_no] ?? savedStrokes;
+                    const isStrokeHole = !isSandCreek && getStrokes(relativeHandicap, hole.stroke_index, hole.hole_no) > 0;
+                    const hasPending = pendingScore[hole.hole_no] !== undefined;
                     const label = !isSandCreek
-                      ? getScoreLabel(strokes, hole.par, hole.stroke_index, relativeHandicap)
-                      : strokes !== null
-                        ? strokes < hole.par ? { label: "BIRDIE 🐦", color: WHITE, bg: GREEN, border: GREEN }
-                          : strokes === hole.par ? { label: "PAR", color: DARK_GREEN, bg: "#e8f5ee", border: "#c8e6d8" }
-                          : { label: `+${strokes - hole.par}`, color: WHITE, bg: "#ef4444", border: "#ef4444" }
+                      ? getScoreLabel(savedStrokes, hole.par, hole.stroke_index, relativeHandicap, hole.hole_no)
+                      : savedStrokes !== null
+                        ? savedStrokes < hole.par ? { label: "BIRDIE 🐦", color: WHITE, bg: GREEN, border: GREEN }
+                          : savedStrokes === hole.par ? { label: "PAR", color: DARK_GREEN, bg: "#e8f5ee", border: "#c8e6d8" }
+                          : { label: `+${savedStrokes - hole.par}`, color: WHITE, bg: "#ef4444", border: "#ef4444" }
                         : null;
 
                     return (
-                      <div key={hole.hole_no} style={{ background: WHITE, borderRadius: 14, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.15)", border: label ? `2px solid ${label.border}` : isStrokeHole ? `2px solid ${GOLD}` : `2px solid ${GOLD}44` }}>
+                      <div key={hole.hole_no} style={{ background: WHITE, borderRadius: 14, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.15)", border: saved === hole.hole_no ? `2px solid ${GREEN}` : label ? `2px solid ${label.border}` : isStrokeHole ? `2px solid ${GOLD}` : `2px solid ${GOLD}44` }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: label && label.bg !== "#e8f5ee" ? label.bg : GOLD }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                             <div style={{ width: 32, height: 32, borderRadius: 8, background: DARK_GREEN, display: "flex", alignItems: "center", justifyContent: "center", color: GOLD, fontSize: 14, fontWeight: 900 }}>
@@ -326,23 +397,33 @@ function RoundPageInner() {
                               </div>
                             </div>
                           </div>
-                          {label && (
+                          {saved === hole.hole_no ? (
+                            <span style={{ fontSize: 13, fontWeight: 900, color: GREEN, letterSpacing: 0.5 }}>✓ SAVED</span>
+                          ) : label && (
                             <span style={{ fontSize: 11, fontWeight: 900, color: label && label.bg !== "#e8f5ee" && label.bg !== GOLD ? label.color : DARK_GREEN, letterSpacing: 0.5 }}>{label.label}</span>
                           )}
                         </div>
 
                         <div style={{ padding: "12px 14px", background: WHITE }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-                            <button onClick={() => updateScore(hole.hole_no, (strokes ?? hole.par) - 1)}
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <button onClick={() => adjustPendingScore(hole.hole_no, -1)}
                               style={{ width: 48, height: 52, borderRadius: "12px 0 0 12px", border: `2px solid ${GOLD}66`, borderRight: "none", fontSize: 26, cursor: "pointer", background: "#fffbeb", color: DARK_GREEN, fontWeight: 900 }}>−</button>
-                            <div style={{ flex: 1, height: 52, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${GOLD}66`, background: WHITE, fontSize: 28, fontWeight: 900, color: "#111" }}>
-                              {saving === hole.hole_no ? "·" : strokes ?? "—"}
+                            <div style={{ flex: 1, height: 52, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${hasPending ? GOLD : GOLD + "66"}`, background: hasPending ? "#fffbeb" : WHITE, fontSize: 28, fontWeight: 900, color: "#111" }}>
+                              {saving === hole.hole_no ? "·" : displayStrokes ?? "—"}
                             </div>
-                            <button onClick={() => updateScore(hole.hole_no, (strokes ?? hole.par - 1) + 1)}
+                            <button onClick={() => adjustPendingScore(hole.hole_no, 1)}
                               style={{ width: 48, height: 52, borderRadius: "0 12px 12px 0", border: `2px solid ${GOLD}66`, borderLeft: "none", fontSize: 26, cursor: "pointer", background: "#fffbeb", color: DARK_GREEN, fontWeight: 900 }}>+</button>
-                            {strokes !== null && (
+
+                            {/* Submit checkmark */}
+                            {hasPending && (
+                              <button onClick={() => submitScore(hole.hole_no)}
+                                style={{ width: 52, height: 52, borderRadius: 12, border: "none", background: GREEN, color: WHITE, cursor: "pointer", fontSize: 22, fontWeight: 900, marginLeft: 4 }}>✓</button>
+                            )}
+
+                            {/* Clear button */}
+                            {savedStrokes !== null && !hasPending && (
                               <button onClick={() => clearScore(hole.hole_no)}
-                                style={{ width: 38, height: 38, borderRadius: 10, border: "2px solid #fee2e2", background: "#fee2e2", color: "#ef4444", cursor: "pointer", fontSize: 14, marginLeft: 8, fontWeight: 900 }}>✕</button>
+                                style={{ width: 38, height: 38, borderRadius: 10, border: "2px solid #fee2e2", background: "#fee2e2", color: "#ef4444", cursor: "pointer", fontSize: 14, marginLeft: 4, fontWeight: 900 }}>✕</button>
                             )}
                           </div>
 
@@ -412,10 +493,10 @@ function RoundPageInner() {
 
                     <p style={{ fontSize: 12, color: `${GOLD}88`, marginBottom: 12, fontWeight: 700, letterSpacing: 1 }}>OTHER HOLES — NO STROKE</p>
                     <div style={{ display: "grid", gap: 8 }}>
-                      {holes.filter(h => getStrokesReceived(relativeHandicap, h.stroke_index) === 0).sort((a, b) => a.hole_no - b.hole_no).map((hole) => (
+                      {holes.filter(h => getStrokes(relativeHandicap, h.stroke_index, h.hole_no) === 0).sort((a, b) => a.hole_no - b.hole_no).map((hole) => (
                         <div key={hole.hole_no} style={{ background: `${DARK_GREEN}55`, borderRadius: 12, padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${GOLD}22` }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ width: 28, height: 28, borderRadius: 6, background: `${DARK_GREEN}`, display: "flex", alignItems: "center", justifyContent: "center", color: `${GOLD}88`, fontSize: 12, fontWeight: 900, border: `1px solid ${GOLD}33` }}>
+                            <div style={{ width: 28, height: 28, borderRadius: 6, background: DARK_GREEN, display: "flex", alignItems: "center", justifyContent: "center", color: `${GOLD}88`, fontSize: 12, fontWeight: 900, border: `1px solid ${GOLD}33` }}>
                               {hole.hole_no}
                             </div>
                             <span style={{ fontSize: 13, fontWeight: 700, color: `${GOLD}88` }}>HOLE {hole.hole_no} · PAR {hole.par} · SI {hole.stroke_index}</span>
@@ -444,20 +525,23 @@ function RoundPageInner() {
                       const diff = entry.holesPlayed > 0 ? entry.bestBallTotal - parTotal : null;
                       const diffStr = diff === null ? "—" : diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`;
                       const isLeading = index === 0 && entry.holesPlayed > 0;
+                      const pointsLabel = index === 0 ? "+3 PTS" : index === 1 ? "+2 PTS" : "+1 PT";
                       return (
                         <div key={entry.team.id} style={{ background: WHITE, borderRadius: 14, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.15)", border: isLeading ? `2px solid ${GOLD}` : "2px solid #e5e7eb" }}>
                           <div style={{ background: isLeading ? `linear-gradient(90deg, ${GREEN}cc, ${DARK_GREEN}cc)` : DARK_GREEN, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                               <span style={{ fontSize: 20 }}>{index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉"}</span>
-                              <span style={{ fontWeight: 900, fontSize: 16, color: WHITE, textTransform: "uppercase", letterSpacing: 0.5 }}>{entry.team.name}</span>
+                              <div>
+                                <span style={{ fontWeight: 900, fontSize: 16, color: WHITE, textTransform: "uppercase", letterSpacing: 0.5 }}>{entry.team.name}</span>
+                                <div style={{ fontSize: 11, color: `${GOLD}99`, fontWeight: 700, letterSpacing: 0.5 }}>THRU {entry.holesPlayed} · {pointsLabel}</div>
+                              </div>
                             </div>
                             <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: diff !== null && diff < 0 ? RED : DARK_GREEN, border: `1px solid ${diff !== null && diff < 0 ? RED : GOLD + "44"}`, borderRadius: 6, minWidth: 44, padding: "4px 10px" }}>
                               <span style={{ fontSize: 20, fontWeight: 900, color: WHITE }}>{diffStr}</span>
                             </div>
                           </div>
-                          <div style={{ padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div style={{ padding: "8px 16px" }}>
                             <span style={{ fontSize: 13, color: GRAY, fontWeight: 600 }}>{entry.members.map((m) => m.name).join(" · ")}</span>
-                            <span style={{ fontSize: 11, color: GRAY, fontWeight: 700, letterSpacing: 0.5 }}>{entry.holesPlayed} HOLES</span>
                           </div>
                         </div>
                       );
@@ -482,14 +566,16 @@ function RoundPageInner() {
                             <span style={{ fontSize: 20 }}>{index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`}</span>
                             <div>
                               <div style={{ fontWeight: 900, fontSize: 15, color: WHITE, textTransform: "uppercase", letterSpacing: 0.5 }}>{entry.player.name}</div>
-                              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", fontWeight: 700, letterSpacing: 0.5 }}>{entry.holesPlayed}/{holes.length} HOLES</div>
+                              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", fontWeight: 700, letterSpacing: 0.5 }}>
+                                THRU {entry.holesPlayed} · {entry.totalLivePoints > 0 ? `+${entry.totalLivePoints} PTS` : "0 PTS"}
+                              </div>
                             </div>
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                             <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: RED, borderRadius: 6, minWidth: 44, padding: "4px 10px" }}>
                               <span style={{ fontSize: 20, fontWeight: 900, color: WHITE }}>{entry.total}</span>
                             </div>
-                            {index < 3 && <span style={{ fontSize: 10, fontWeight: 900, color: GOLD, letterSpacing: 0.5 }}>{index === 0 ? "+3 PTS" : index === 1 ? "+2 PTS" : "+1 PT"}</span>}
+                            {index < 3 && <span style={{ fontSize: 10, fontWeight: 900, color: GOLD, letterSpacing: 0.5 }}>{index === 0 ? "+3 LOW RD" : index === 1 ? "+2 LOW RD" : "+1 LOW RD"}</span>}
                           </div>
                         </div>
                       </div>
