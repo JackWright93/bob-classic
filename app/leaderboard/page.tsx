@@ -136,8 +136,8 @@ function LeaderboardInner() {
   useEffect(() => {
     calculate();
     const channel = supabase.channel("lb")
-      .on("postgres_changes", { event: "*", schema: "public", table: "hole_scores" }, calculate)
-      .subscribe();
+  .on("postgres_changes", { event: "*", schema: "public", table: "hole_scores" }, () => calculate())
+  .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
 
