@@ -31,10 +31,24 @@ function LeaderboardInner() {
     const { data: holes } = await supabase.from("scorecard_holes").select("hole_no, par, stroke_index, scorecard_key");
     const { data: teams } = await supabase.from("teams").select("id, name, round_id");
     const { data: teamPlayers } = await supabase.from("team_players").select("team_id, player_id");
+    const { data: specialAwards } = await supabase.from("special_awards").select("player_id, round_id, type, confirmed").eq("confirmed", true);
 
     if (!players || !rounds || !scores || !holes || !teams || !teamPlayers) { setLoading(false); return; }
 
     const lowest = Math.min(...players.map(p => p.base_handicap ?? 0));
+
+    const getSR = (mHcp: number, si: number | null, holeNo: number, is27: boolean) => {
+      if (!si) return 0;
+      if (is27) {
+        const nineGroup = holeNo <= 9 ? 0 : holeNo <= 18 ? 1 : 2;
+        const fullRounds = Math.floor(mHcp / 3);
+        const remainder = mHcp % 3;
+        if (si <= fullRounds) return 1;
+        if (si === fullRounds + 1 && nineGroup < remainder) return 1;
+        return 0;
+      }
+      return Math.floor(mHcp / 18) + (si <= (mHcp % 18) ? 1 : 0);
+    };
 
     const result: PlayerPoints[] = players.map(player => {
       const hcp = Math.max(0, Math.round((player.base_handicap ?? 0) - lowest));
@@ -50,27 +64,14 @@ function LeaderboardInner() {
 
         let pts = 0;
 
-        const getSR = (mHcp: number, strokeIndex: number | null, holeNo: number) => {
-          if (!strokeIndex) return 0;
-          if (is27) {
-            const nineGroup = holeNo <= 9 ? 0 : holeNo <= 18 ? 1 : 2;
-            const fullRounds = Math.floor(mHcp / 3);
-            const remainder = mHcp % 3;
-            if (strokeIndex <= fullRounds) return 1;
-            if (strokeIndex === fullRounds + 1 && nineGroup < remainder) return 1;
-            return 0;
-          }
-          return Math.floor(mHcp / 18) + (strokeIndex <= (mHcp % 18) ? 1 : 0);
-        };
-
-        // Net birdie/eagle/HIO points
+        // Net birdie/eagle/HIO
         playerScores.forEach(score => {
           const hole = roundHoles.find(h => h.hole_no === score.hole_no);
           if (!hole) return;
           if (isSC) {
             if (score.strokes === hole.par - 1) pts += 1;
           } else {
-            const sr = getSR(hcp, hole.stroke_index, score.hole_no);
+            const sr = getSR(hcp, hole.stroke_index, score.hole_no, is27);
             const diff = (score.strokes - sr) - hole.par;
             if (score.strokes === 1) pts += 5;
             else if (diff <= -2) pts += 3;
@@ -78,38 +79,41 @@ function LeaderboardInner() {
           }
         });
 
-        // Sand Creek 27-or-under bonus
+        // Sand Creek bonus
         if (isSC) {
           const t = playerScores.reduce((s, x) => s + x.strokes, 0);
           if (playerScores.length === 9 && t <= 27) pts += 1;
         }
 
-        // Live low gross round points
-        if (playerScores.length > 0) {
-          const allTotals = players.map(p => {
-            const ps = scores.filter(s => s.player_id === p.id && s.round_id === round.id);
-            if (ps.length === 0) return null;
-            return { id: p.id, total: ps.reduce((s, x) => s + x.strokes, 0) };
-          }).filter(Boolean) as { id: string; total: number }[];
+        // Confirmed LD/CTP awards
+        const confirmedAwards = (specialAwards ?? []).filter(
+          a => a.player_id === player.id && a.round_id === round.id
+        );
+        pts += confirmedAwards.length; // 1 point each
 
-          if (allTotals.length >= 2) {
-            const sorted = [...allTotals].sort((a, b) => a.total - b.total);
-            const pm: Record<number, number> = { 0: 3, 1: 2, 2: 1 };
-            let i = 0;
-            while (i < sorted.length) {
-              let j = i;
-              while (j < sorted.length && sorted[j].total === sorted[i].total) j++;
-              const tiedCount = j - i;
-              const shared = Math.floor(
-                Array.from({ length: tiedCount }, (_, k) => pm[i + k] ?? 0).reduce((a, b) => a + b, 0) / tiedCount
-              );
-              if (shared > 0) {
-                for (let k = i; k < j; k++) {
-                  if (sorted[k].id === player.id) pts += shared;
-                }
+        // Live low gross round points
+        const allTotals = players.map(p => {
+          const ps = scores.filter(s => s.player_id === p.id && s.round_id === round.id);
+          if (ps.length === 0) return null;
+          return { id: p.id, total: ps.reduce((s, x) => s + x.strokes, 0) };
+        }).filter(Boolean) as { id: string; total: number }[];
+
+        if (allTotals.length >= 2) {
+          const sorted = [...allTotals].sort((a, b) => a.total - b.total);
+          const pm: Record<number, number> = { 0: 3, 1: 2, 2: 1 };
+          let i = 0;
+          while (i < sorted.length) {
+            let j = i;
+            while (j < sorted.length && sorted[j].total === sorted[i].total) j++;
+            const shared = Math.floor(
+              Array.from({ length: j - i }, (_, k) => pm[i + k] ?? 0).reduce((a, b) => a + b, 0) / (j - i)
+            );
+            if (shared > 0) {
+              for (let k = i; k < j; k++) {
+                if (sorted[k].id === player.id) pts += shared;
               }
-              i = j;
             }
+            i = j;
           }
         }
 
@@ -127,13 +131,13 @@ function LeaderboardInner() {
                   const score = scores.find(s => s.player_id === member.id && s.hole_no === hole.hole_no && s.round_id === round.id);
                   if (!score) return null;
                   const mHcp = Math.max(0, Math.round((member.base_handicap ?? 0) - lowest));
-                  const sr = getSR(mHcp, hole.stroke_index, hole.hole_no);
+                  const sr = getSR(mHcp, hole.stroke_index, hole.hole_no, is27);
                   return score.strokes - sr;
                 }).filter((s): s is number => s !== null);
                 if (netScores.length > 0) { bestBallTotal += Math.min(...netScores); holesPlayed++; }
               });
               const isMember = memberIds.includes(player.id);
-              return { team, bestBallTotal, holesPlayed, isMember };
+              return { bestBallTotal, holesPlayed, isMember };
             }).filter(t => t.holesPlayed > 0)
               .sort((a, b) => a.bestBallTotal - b.bestBallTotal);
 
@@ -163,14 +167,13 @@ function LeaderboardInner() {
     calculate();
     const channel = supabase.channel("lb")
       .on("postgres_changes", { event: "*", schema: "public", table: "hole_scores" }, () => calculate())
+      .on("postgres_changes", { event: "*", schema: "public", table: "special_awards" }, () => calculate())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
 
   return (
     <main style={{ minHeight: "100vh", background: BG, fontFamily: "Arial, sans-serif" }}>
-
-      {/* Header */}
       <div style={{ background: `linear-gradient(160deg, ${DARK_GREEN} 0%, #1a5c32 100%)`, padding: "16px 20px 20px", position: "relative", borderBottom: `2px solid ${GOLD}44` }}>
         <button onClick={() => router.push("/")} style={{ background: "none", border: "none", color: GOLD, fontSize: 20, cursor: "pointer", padding: 0, position: "absolute", top: 18, left: 16 }}>←</button>
         <div style={{ textAlign: "center" }}>
@@ -193,8 +196,6 @@ function LeaderboardInner() {
 
         {!loading && (
           <div style={{ borderRadius: 16, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.15)" }}>
-
-            {/* Column headers */}
             <div style={{ background: DARK_GREEN, padding: "8px 16px", display: "flex", alignItems: "center", borderBottom: `1px solid ${GOLD}44` }}>
               <div style={{ width: 36 }} />
               <div style={{ flex: 1, fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>PLAYER</div>
@@ -202,8 +203,8 @@ function LeaderboardInner() {
             </div>
 
             {leaderboard.map((player, index) => {
-              const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : null;
               const isFirst = index === 0;
+              const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : null;
 
               return (
                 <div key={player.id} onClick={() => router.push(`/leaderboard/${player.id}`)}
@@ -234,7 +235,6 @@ function LeaderboardInner() {
               );
             })}
 
-            {/* Footer */}
             <div style={{ background: DARK_GREEN, padding: "10px 16px", display: "flex", justifyContent: "center", borderTop: `1px solid ${GOLD}33` }}>
               <span style={{ fontSize: 11, color: `${GOLD}77`, letterSpacing: 1, fontWeight: 700 }}>TAP A PLAYER FOR FULL BREAKDOWN</span>
             </div>
