@@ -269,7 +269,6 @@ function RoundPageInner() {
   const individualLeaderboard = getIndividualRoundLeaderboard();
   const strokeHoles = holes.filter(h => !isSandCreek && getStrokes(relativeHandicap, h.stroke_index, h.hole_no) > 0);
 
-  // Tab order: MY SCORE | TEAMS | INDIVIDUAL | STROKES
   const tabs = [
     { key: "score", label: "MY SCORE" },
     ...(!isSandCreek ? [
@@ -278,6 +277,21 @@ function RoundPageInner() {
       { key: "mystrokes", label: "STROKES" },
     ] : [])
   ];
+
+  // Shared points info box
+  const PointsInfoBox = ({ label }: { label: string }) => (
+    <div style={{ background: DARK_GREEN, padding: "12px 16px", borderTop: `1px solid ${GOLD}33` }}>
+      <div style={{ fontSize: 11, color: `${GOLD}99`, letterSpacing: 1, fontWeight: 700, textAlign: "center", marginBottom: 10 }}>{label}</div>
+      <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+        {[{ place: "🥇 1ST", pts: "3 PTS" }, { place: "🥈 2ND", pts: "2 PTS" }, { place: "🥉 3RD", pts: "1 PT" }].map((item) => (
+          <div key={item.place} style={{ flex: 1, background: `${GOLD}22`, borderRadius: 8, padding: "6px 4px", textAlign: "center", border: `1px solid ${GOLD}44` }}>
+            <div style={{ fontSize: 12, color: GOLD, fontWeight: 900 }}>{item.place}</div>
+            <div style={{ fontSize: 13, color: WHITE, fontWeight: 900, marginTop: 2 }}>{item.pts}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <main style={{ minHeight: "100vh", background: BG, fontFamily: "Arial, sans-serif" }}>
@@ -309,10 +323,10 @@ function RoundPageInner() {
             {activeTab === "score" && (
               <>
                 <div style={{ background: GOLD, borderRadius: 14, padding: "12px 16px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 4px 12px rgba(201,168,76,0.3)" }}>
-                  <span style={{ fontSize: 13, color: DARK_GREEN, fontWeight: 800, letterSpacing: 0.5 }}>{holesCompleted}/{holes.length} HOLES</span>
+                  <span style={{ fontSize: 14, color: DARK_GREEN, fontWeight: 800, letterSpacing: 0.5 }}>{holesCompleted}/{holes.length} HOLES</span>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 13, color: DARK_GREEN, fontWeight: 800, letterSpacing: 0.5 }}>TOTAL</span>
-                    <span style={{ fontSize: 26, fontWeight: 900, color: DARK_GREEN }}>{totalStrokes || "—"}</span>
+                    <span style={{ fontSize: 14, color: DARK_GREEN, fontWeight: 800, letterSpacing: 0.5 }}>TOTAL</span>
+                    <span style={{ fontSize: 28, fontWeight: 900, color: DARK_GREEN }}>{totalStrokes || "—"}</span>
                   </div>
                 </div>
 
@@ -339,44 +353,44 @@ function RoundPageInner() {
                       <div key={hole.hole_no} style={{ background: WHITE, borderRadius: 14, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.15)", border: saved === hole.hole_no ? `2px solid ${GREEN}` : displayLabel ? `2px solid ${displayLabel.border}` : isStrokeHole ? `2px solid ${GOLD}` : `2px solid ${GOLD}44` }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: displayLabel && displayLabel.bg !== "#e8f5ee" ? displayLabel.bg : GOLD }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ width: 32, height: 32, borderRadius: 8, background: DARK_GREEN, display: "flex", alignItems: "center", justifyContent: "center", color: GOLD, fontSize: 14, fontWeight: 900 }}>
+                            <div style={{ width: 34, height: 34, borderRadius: 8, background: DARK_GREEN, display: "flex", alignItems: "center", justifyContent: "center", color: GOLD, fontSize: 15, fontWeight: 900 }}>
                               {hole.hole_no}
                             </div>
                             <div>
                               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                                <span style={{ fontSize: 13, fontWeight: 800, color: displayLabel && displayLabel.bg !== "#e8f5ee" && displayLabel.bg !== GOLD ? displayLabel.color : DARK_GREEN }}>PAR {hole.par}</span>
+                                <span style={{ fontSize: 14, fontWeight: 800, color: displayLabel && displayLabel.bg !== "#e8f5ee" && displayLabel.bg !== GOLD ? displayLabel.color : DARK_GREEN }}>PAR {hole.par}</span>
                                 {!isSandCreek && hole.stroke_index && (
-                                  <span style={{ fontSize: 11, color: displayLabel && displayLabel.bg !== "#e8f5ee" && displayLabel.bg !== GOLD ? "rgba(255,255,255,0.8)" : `${DARK_GREEN}99`, fontWeight: 700 }}>SI {hole.stroke_index}</span>
+                                  <span style={{ fontSize: 12, color: displayLabel && displayLabel.bg !== "#e8f5ee" && displayLabel.bg !== GOLD ? "rgba(255,255,255,0.8)" : `${DARK_GREEN}99`, fontWeight: 700 }}>SI {hole.stroke_index}</span>
                                 )}
                                 {isStrokeHole && (
-                                  <span style={{ fontSize: 10, fontWeight: 900, color: DARK_GREEN, background: WHITE, borderRadius: 4, padding: "2px 6px", letterSpacing: 0.5 }}>⭐ STROKE</span>
+                                  <span style={{ fontSize: 11, fontWeight: 900, color: DARK_GREEN, background: WHITE, borderRadius: 4, padding: "2px 6px", letterSpacing: 0.5 }}>⭐ STROKE</span>
                                 )}
                               </div>
                             </div>
                           </div>
                           {saved === hole.hole_no ? (
-                            <span style={{ fontSize: 13, fontWeight: 900, color: GREEN, background: WHITE, borderRadius: 6, padding: "2px 8px" }}>✓ SAVED</span>
+                            <span style={{ fontSize: 14, fontWeight: 900, color: GREEN, background: WHITE, borderRadius: 6, padding: "2px 8px" }}>✓ SAVED</span>
                           ) : displayLabel ? (
-                            <span style={{ fontSize: 11, fontWeight: 900, color: displayLabel && displayLabel.bg !== "#e8f5ee" && displayLabel.bg !== GOLD ? displayLabel.color : DARK_GREEN, letterSpacing: 0.5 }}>{displayLabel.label}</span>
+                            <span style={{ fontSize: 12, fontWeight: 900, color: displayLabel && displayLabel.bg !== "#e8f5ee" && displayLabel.bg !== GOLD ? displayLabel.color : DARK_GREEN, letterSpacing: 0.5 }}>{displayLabel.label}</span>
                           ) : null}
                         </div>
 
                         <div style={{ padding: "12px 14px", background: WHITE }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                             <button onClick={() => adjustPendingScore(hole.hole_no, -1)}
-                              style={{ width: 48, height: 52, borderRadius: "12px 0 0 12px", border: `2px solid ${GOLD}66`, borderRight: "none", fontSize: 26, cursor: "pointer", background: "#fffbeb", color: DARK_GREEN, fontWeight: 900 }}>−</button>
-                            <div style={{ flex: 1, height: 52, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${hasPending ? GOLD : GOLD + "44"}`, background: hasPending ? "#fffbeb" : WHITE, fontSize: 28, fontWeight: 900, color: "#111" }}>
+                              style={{ width: 52, height: 56, borderRadius: "12px 0 0 12px", border: `2px solid ${GOLD}66`, borderRight: "none", fontSize: 28, cursor: "pointer", background: "#fffbeb", color: DARK_GREEN, fontWeight: 900 }}>−</button>
+                            <div style={{ flex: 1, height: 56, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${hasPending ? GOLD : GOLD + "44"}`, background: hasPending ? "#fffbeb" : WHITE, fontSize: 30, fontWeight: 900, color: "#111" }}>
                               {saving === hole.hole_no ? "·" : displayStrokes ?? "—"}
                             </div>
                             <button onClick={() => adjustPendingScore(hole.hole_no, 1)}
-                              style={{ width: 48, height: 52, borderRadius: "0 12px 12px 0", border: `2px solid ${GOLD}66`, borderLeft: "none", fontSize: 26, cursor: "pointer", background: "#fffbeb", color: DARK_GREEN, fontWeight: 900 }}>+</button>
+                              style={{ width: 52, height: 56, borderRadius: "0 12px 12px 0", border: `2px solid ${GOLD}66`, borderLeft: "none", fontSize: 28, cursor: "pointer", background: "#fffbeb", color: DARK_GREEN, fontWeight: 900 }}>+</button>
                             {hasPending && (
                               <button onClick={() => submitScore(hole.hole_no)}
-                                style={{ width: 52, height: 52, borderRadius: 12, border: "none", background: GREEN, color: WHITE, cursor: "pointer", fontSize: 22, fontWeight: 900 }}>✓</button>
+                                style={{ width: 56, height: 56, borderRadius: 12, border: "none", background: GREEN, color: WHITE, cursor: "pointer", fontSize: 24, fontWeight: 900 }}>✓</button>
                             )}
                             {savedStrokes !== null && !hasPending && (
                               <button onClick={() => clearScore(hole.hole_no)}
-                                style={{ width: 40, height: 40, borderRadius: 10, border: "2px solid #fee2e2", background: "#fee2e2", color: "#ef4444", cursor: "pointer", fontSize: 14, fontWeight: 900 }}>✕</button>
+                                style={{ width: 42, height: 42, borderRadius: 10, border: "2px solid #fee2e2", background: "#fee2e2", color: "#ef4444", cursor: "pointer", fontSize: 15, fontWeight: 900 }}>✕</button>
                             )}
                           </div>
 
@@ -386,7 +400,7 @@ function RoundPageInner() {
                             const claimedByOther = claimed && !claimedByMe;
                             return (
                               <button key={sh.type} onClick={() => claimAward(hole.hole_no, sh.type)} disabled={!!claimedByOther}
-                                style={{ marginTop: 10, width: "100%", padding: "9px 12px", borderRadius: 10, border: claimedByMe ? `2px solid ${GREEN}` : claimedByOther ? `2px solid #e5e7eb` : `2px solid ${GOLD}`, background: claimedByMe ? LIGHT_GREEN : claimedByOther ? "#f9fafb" : "#fffbeb", cursor: claimedByOther ? "default" : "pointer", fontSize: 12, fontWeight: 800, color: claimedByMe ? GREEN : claimedByOther ? GRAY : DARK_GREEN, textAlign: "left", letterSpacing: 0.5 }}>
+                                style={{ marginTop: 10, width: "100%", padding: "10px 12px", borderRadius: 10, border: claimedByMe ? `2px solid ${GREEN}` : claimedByOther ? `2px solid #e5e7eb` : `2px solid ${GOLD}`, background: claimedByMe ? LIGHT_GREEN : claimedByOther ? "#f9fafb" : "#fffbeb", cursor: claimedByOther ? "default" : "pointer", fontSize: 13, fontWeight: 800, color: claimedByMe ? GREEN : claimedByOther ? GRAY : DARK_GREEN, textAlign: "left", letterSpacing: 0.5 }}>
                                 {sh.type === "longest_drive" ? "🚗 LONGEST DRIVE" : "📍 CLOSEST TO PIN"}
                                 {claimedByMe && " — CLAIMED ✓"}
                                 {claimedByOther && " — CLAIMED BY ANOTHER"}
@@ -402,20 +416,19 @@ function RoundPageInner() {
               </>
             )}
 
-            {/* TEAM TAB — Masters leaderboard style */}
+            {/* TEAM TAB */}
             {activeTab === "team" && (
               <div>
                 {teamLeaderboard.length === 0 ? (
                   <div style={{ background: `${DARK_GREEN}cc`, borderRadius: 14, padding: 24, textAlign: "center", color: GOLD, border: `1px solid ${GOLD}44` }}>Teams not set up yet for this round.</div>
                 ) : (
-                  <div style={{ borderRadius: 16, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
+                  <div style={{ borderRadius: 16, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}>
                     {/* Header row */}
-                    <div style={{ background: DARK_GREEN, padding: "8px 16px", display: "flex", alignItems: "center", borderBottom: `1px solid ${GOLD}44` }}>
-                      <div style={{ width: 36 }} />
-                      <div style={{ flex: 1, fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>TEAM</div>
-                      <div style={{ width: 50, textAlign: "center", fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>SCORE</div>
-                      <div style={{ width: 44, textAlign: "center", fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>PTS</div>
-                      <div style={{ width: 44, textAlign: "center", fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>THRU</div>
+                    <div style={{ background: DARK_GREEN, padding: "10px 16px", display: "flex", alignItems: "center", borderBottom: `1px solid ${GOLD}44` }}>
+                      <div style={{ width: 40 }} />
+                      <div style={{ flex: 1, fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>TEAM</div>
+                      <div style={{ width: 70, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>SCORE</div>
+                      <div style={{ width: 52, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>THRU</div>
                     </div>
 
                     {teamLeaderboard.map((entry, index) => {
@@ -424,30 +437,25 @@ function RoundPageInner() {
                         .reduce((sum, h) => sum + h.par, 0);
                       const diff = entry.holesPlayed > 0 ? entry.bestBallTotal - parTotal : null;
                       const diffStr = diff === null ? "—" : diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`;
-                      const diffColor = diff === null ? `${WHITE}55` : diff < 0 ? RED : diff > 0 ? "#f97316" : WHITE;
+                      // White for over par, red for under par
+                      const diffColor = diff === null ? `${WHITE}55` : diff < 0 ? RED : WHITE;
                       const isFirst = index === 0;
                       const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉";
-                      const ptsLabel = entry.holesPlayed > 0 ? (index === 0 ? "3" : index === 1 ? "2" : "1") : "—";
 
                       return (
                         <div key={entry.team.id} style={{ borderBottom: `1px solid ${GOLD}22` }}>
-                          <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", background: isFirst ? `linear-gradient(90deg, ${GREEN}cc, ${DARK_GREEN}cc)` : `${DARK_GREEN}99` }}>
-                            <div style={{ width: 36, fontSize: isFirst ? 20 : 14, fontWeight: 900, color: isFirst ? GOLD : `${GOLD}88`, textAlign: "center" }}>
+                          <div style={{ display: "flex", alignItems: "center", padding: "14px 16px", background: isFirst ? `linear-gradient(90deg, ${GREEN}cc, ${DARK_GREEN}cc)` : `${DARK_GREEN}99` }}>
+                            <div style={{ width: 40, fontSize: isFirst ? 22 : 16, fontWeight: 900, color: isFirst ? GOLD : `${GOLD}88`, textAlign: "center" }}>
                               {medal}
                             </div>
                             <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 15, fontWeight: 900, color: WHITE, letterSpacing: 0.5, textTransform: "uppercase" }}>{entry.team.name}</div>
-                              <div style={{ fontSize: 11, color: `${WHITE}66`, fontWeight: 600, marginTop: 2 }}>{entry.members.map(m => m.name).join(" · ")}</div>
+                              <div style={{ fontSize: 17, fontWeight: 900, color: WHITE, letterSpacing: 0.5, textTransform: "uppercase" }}>{entry.team.name}</div>
+                              <div style={{ fontSize: 12, color: `${WHITE}66`, fontWeight: 600, marginTop: 2 }}>{entry.members.map(m => m.name).join(" · ")}</div>
                             </div>
-                            <div style={{ width: 50, textAlign: "center" }}>
-                              <span style={{ fontSize: 18, fontWeight: 900, color: diffColor }}>{diffStr}</span>
+                            <div style={{ width: 70, textAlign: "center" }}>
+                              <span style={{ fontSize: 22, fontWeight: 900, color: diffColor }}>{diffStr}</span>
                             </div>
-                            <div style={{ width: 44, textAlign: "center" }}>
-                              <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: entry.holesPlayed > 0 ? RED : DARK_GREEN, border: `1px solid ${entry.holesPlayed > 0 ? RED : GOLD + "44"}`, borderRadius: 6, minWidth: 32, padding: "2px 6px" }}>
-                                <span style={{ fontSize: 14, fontWeight: 900, color: WHITE }}>{ptsLabel}</span>
-                              </div>
-                            </div>
-                            <div style={{ width: 44, textAlign: "center", fontSize: 12, color: `${GOLD}88`, fontWeight: 700 }}>
+                            <div style={{ width: 52, textAlign: "center", fontSize: 14, color: `${GOLD}88`, fontWeight: 700 }}>
                               {entry.holesPlayed > 0 ? entry.holesPlayed : "—"}
                             </div>
                           </div>
@@ -455,55 +463,46 @@ function RoundPageInner() {
                       );
                     })}
 
-                    <div style={{ background: DARK_GREEN, padding: "8px 16px", borderTop: `1px solid ${GOLD}33`, textAlign: "center" }}>
-                      <span style={{ fontSize: 11, color: `${GOLD}77`, letterSpacing: 1, fontWeight: 700 }}>LIVE BEST BALL (NET) STANDINGS</span>
-                    </div>
+                    <PointsInfoBox label="TEAM COMPETITION POINTS" />
                   </div>
                 )}
               </div>
             )}
 
-            {/* INDIVIDUAL TAB — Masters leaderboard style */}
+            {/* INDIVIDUAL TAB */}
             {activeTab === "individual" && (
               <div>
                 {individualLeaderboard.length === 0 ? (
                   <div style={{ background: `${DARK_GREEN}cc`, borderRadius: 14, padding: 24, textAlign: "center", color: GOLD, border: `1px solid ${GOLD}44` }}>No scores entered yet.</div>
                 ) : (
-                  <div style={{ borderRadius: 16, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
+                  <div style={{ borderRadius: 16, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}>
                     {/* Header row */}
-                    <div style={{ background: DARK_GREEN, padding: "8px 16px", display: "flex", alignItems: "center", borderBottom: `1px solid ${GOLD}44` }}>
-                      <div style={{ width: 36 }} />
-                      <div style={{ flex: 1, fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>PLAYER</div>
-                      <div style={{ width: 50, textAlign: "center", fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>SCORE</div>
-                      <div style={{ width: 44, textAlign: "center", fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>PTS</div>
-                      <div style={{ width: 44, textAlign: "center", fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>THRU</div>
+                    <div style={{ background: DARK_GREEN, padding: "10px 16px", display: "flex", alignItems: "center", borderBottom: `1px solid ${GOLD}44` }}>
+                      <div style={{ width: 40 }} />
+                      <div style={{ flex: 1, fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>PLAYER</div>
+                      <div style={{ width: 70, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>SCORE</div>
+                      <div style={{ width: 52, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>THRU</div>
                     </div>
 
                     {individualLeaderboard.map((entry, index) => {
                       const isFirst = index === 0;
                       const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : null;
-                      const ptsLabel = index < 3 ? (index === 0 ? "3" : index === 1 ? "2" : "1") : "—";
 
                       return (
                         <div key={entry.player.id} style={{ borderBottom: `1px solid ${GOLD}22` }}>
-                          <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", background: isFirst ? `linear-gradient(90deg, ${GREEN}cc, ${DARK_GREEN}cc)` : `${DARK_GREEN}99` }}>
-                            <div style={{ width: 36, fontSize: isFirst ? 20 : 14, fontWeight: 900, color: isFirst ? GOLD : `${GOLD}88`, textAlign: "center" }}>
+                          <div style={{ display: "flex", alignItems: "center", padding: "14px 16px", background: isFirst ? `linear-gradient(90deg, ${GREEN}cc, ${DARK_GREEN}cc)` : `${DARK_GREEN}99` }}>
+                            <div style={{ width: 40, fontSize: isFirst ? 22 : 16, fontWeight: 900, color: isFirst ? GOLD : `${GOLD}88`, textAlign: "center" }}>
                               {medal ?? `${index + 1}`}
                             </div>
                             <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 15, fontWeight: 900, color: WHITE, letterSpacing: 0.5, textTransform: "uppercase" }}>{entry.player.name}</div>
+                              <div style={{ fontSize: 17, fontWeight: 900, color: WHITE, letterSpacing: 0.5, textTransform: "uppercase" }}>{entry.player.name}</div>
                             </div>
-                            <div style={{ width: 50, textAlign: "center" }}>
-                              <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: RED, borderRadius: 6, minWidth: 36, padding: "2px 8px" }}>
-                                <span style={{ fontSize: 16, fontWeight: 900, color: WHITE }}>{entry.total}</span>
+                            <div style={{ width: 70, textAlign: "center" }}>
+                              <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: RED, borderRadius: 6, minWidth: 44, padding: "4px 10px" }}>
+                                <span style={{ fontSize: 20, fontWeight: 900, color: WHITE }}>{entry.total}</span>
                               </div>
                             </div>
-                            <div style={{ width: 44, textAlign: "center" }}>
-                              <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: index < 3 ? RED : DARK_GREEN, border: `1px solid ${index < 3 ? RED : GOLD + "44"}`, borderRadius: 6, minWidth: 32, padding: "2px 6px" }}>
-                                <span style={{ fontSize: 14, fontWeight: 900, color: WHITE }}>{ptsLabel}</span>
-                              </div>
-                            </div>
-                            <div style={{ width: 44, textAlign: "center", fontSize: 12, color: `${GOLD}88`, fontWeight: 700 }}>
+                            <div style={{ width: 52, textAlign: "center", fontSize: 14, color: `${GOLD}88`, fontWeight: 700 }}>
                               {entry.holesPlayed}
                             </div>
                           </div>
@@ -511,9 +510,7 @@ function RoundPageInner() {
                       );
                     })}
 
-                    <div style={{ background: DARK_GREEN, padding: "8px 16px", borderTop: `1px solid ${GOLD}33`, textAlign: "center" }}>
-                      <span style={{ fontSize: 11, color: `${GOLD}77`, letterSpacing: 1, fontWeight: 700 }}>TOP 3 EARN LOW ROUND POINTS</span>
-                    </div>
+                    <PointsInfoBox label="LOW ROUND INDIVIDUAL POINTS" />
                   </div>
                 )}
               </div>
@@ -523,8 +520,8 @@ function RoundPageInner() {
             {activeTab === "mystrokes" && (
               <div>
                 <div style={{ background: GOLD, borderRadius: 14, padding: "14px 16px", marginBottom: 16, boxShadow: "0 4px 12px rgba(201,168,76,0.3)" }}>
-                  <div style={{ fontSize: 14, fontWeight: 900, color: DARK_GREEN, letterSpacing: 0.5 }}>YOUR HANDICAP STROKES</div>
-                  <div style={{ fontSize: 13, color: `${DARK_GREEN}99`, marginTop: 4, fontWeight: 700 }}>
+                  <div style={{ fontSize: 15, fontWeight: 900, color: DARK_GREEN, letterSpacing: 0.5 }}>YOUR HANDICAP STROKES</div>
+                  <div style={{ fontSize: 14, color: `${DARK_GREEN}99`, marginTop: 4, fontWeight: 700 }}>
                     {relativeHandicap === 0
                       ? "You are the baseline — no strokes received"
                       : `You receive ${relativeHandicap} stroke${relativeHandicap !== 1 ? "s" : ""} this round`}
@@ -534,44 +531,44 @@ function RoundPageInner() {
                 {relativeHandicap === 0 ? (
                   <div style={{ background: `${DARK_GREEN}cc`, borderRadius: 14, padding: 24, textAlign: "center", color: GOLD, border: `1px solid ${GOLD}44` }}>
                     <div style={{ fontSize: 32, marginBottom: 8 }}>🏌️</div>
-                    <div style={{ fontWeight: 900, letterSpacing: 1 }}>NO STROKES — YOU'RE THE BASELINE</div>
+                    <div style={{ fontWeight: 900, letterSpacing: 1, fontSize: 14 }}>NO STROKES — YOU'RE THE BASELINE</div>
                   </div>
                 ) : (
                   <>
-                    <p style={{ fontSize: 12, color: GOLD, marginBottom: 12, fontWeight: 700, letterSpacing: 1 }}>⭐ HOLES WHERE YOU GET A STROKE</p>
+                    <p style={{ fontSize: 13, color: GOLD, marginBottom: 12, fontWeight: 700, letterSpacing: 1 }}>⭐ HOLES WHERE YOU GET A STROKE</p>
                     <div style={{ display: "grid", gap: 8, marginBottom: 20 }}>
                       {strokeHoles.sort((a, b) => a.hole_no - b.hole_no).map((hole) => (
                         <div key={hole.hole_no} style={{ background: WHITE, borderRadius: 12, overflow: "hidden", border: `2px solid ${GOLD}` }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: GOLD }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <div style={{ width: 32, height: 32, borderRadius: 8, background: DARK_GREEN, display: "flex", alignItems: "center", justifyContent: "center", color: GOLD, fontSize: 14, fontWeight: 900 }}>
+                              <div style={{ width: 34, height: 34, borderRadius: 8, background: DARK_GREEN, display: "flex", alignItems: "center", justifyContent: "center", color: GOLD, fontSize: 15, fontWeight: 900 }}>
                                 {hole.hole_no}
                               </div>
                               <div>
-                                <div style={{ fontSize: 13, fontWeight: 900, color: DARK_GREEN }}>HOLE {hole.hole_no} · PAR {hole.par}</div>
-                                <div style={{ fontSize: 11, color: `${DARK_GREEN}99`, fontWeight: 700 }}>SI {hole.stroke_index}</div>
+                                <div style={{ fontSize: 14, fontWeight: 900, color: DARK_GREEN }}>HOLE {hole.hole_no} · PAR {hole.par}</div>
+                                <div style={{ fontSize: 12, color: `${DARK_GREEN}99`, fontWeight: 700 }}>SI {hole.stroke_index}</div>
                               </div>
                             </div>
                             <div style={{ textAlign: "right" }}>
-                              <div style={{ fontSize: 11, fontWeight: 900, color: DARK_GREEN, letterSpacing: 0.5 }}>⭐ STROKE HOLE</div>
-                              <div style={{ fontSize: 11, color: `${DARK_GREEN}88`, fontWeight: 700 }}>Net par = {hole.par - 1} shots</div>
+                              <div style={{ fontSize: 12, fontWeight: 900, color: DARK_GREEN, letterSpacing: 0.5 }}>⭐ STROKE HOLE</div>
+                              <div style={{ fontSize: 12, color: `${DARK_GREEN}88`, fontWeight: 700 }}>Net par = {hole.par - 1} shots</div>
                             </div>
                           </div>
                         </div>
                       ))}
                     </div>
 
-                    <p style={{ fontSize: 12, color: `${GOLD}88`, marginBottom: 12, fontWeight: 700, letterSpacing: 1 }}>OTHER HOLES — NO STROKE</p>
+                    <p style={{ fontSize: 13, color: `${GOLD}88`, marginBottom: 12, fontWeight: 700, letterSpacing: 1 }}>OTHER HOLES — NO STROKE</p>
                     <div style={{ display: "grid", gap: 8 }}>
                       {holes.filter(h => getStrokes(relativeHandicap, h.stroke_index, h.hole_no) === 0).sort((a, b) => a.hole_no - b.hole_no).map((hole) => (
                         <div key={hole.hole_no} style={{ background: `${DARK_GREEN}55`, borderRadius: 12, padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${GOLD}22` }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ width: 28, height: 28, borderRadius: 6, background: DARK_GREEN, display: "flex", alignItems: "center", justifyContent: "center", color: `${GOLD}88`, fontSize: 12, fontWeight: 900, border: `1px solid ${GOLD}33` }}>
+                            <div style={{ width: 30, height: 30, borderRadius: 6, background: DARK_GREEN, display: "flex", alignItems: "center", justifyContent: "center", color: `${GOLD}88`, fontSize: 13, fontWeight: 900, border: `1px solid ${GOLD}33` }}>
                               {hole.hole_no}
                             </div>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: `${GOLD}88` }}>HOLE {hole.hole_no} · PAR {hole.par} · SI {hole.stroke_index}</span>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: `${GOLD}88` }}>HOLE {hole.hole_no} · PAR {hole.par} · SI {hole.stroke_index}</span>
                           </div>
-                          <span style={{ fontSize: 11, color: `${GOLD}55`, fontWeight: 700 }}>NO STROKE</span>
+                          <span style={{ fontSize: 12, color: `${GOLD}55`, fontWeight: 700 }}>NO STROKE</span>
                         </div>
                       ))}
                     </div>
