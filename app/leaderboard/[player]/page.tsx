@@ -32,13 +32,41 @@ function PlayerDetailInner() {
   const playerId = params.player as string;
 
   const [playerName, setPlayerName] = useState("");
+  const [playerAvatar, setPlayerAvatar] = useState<string | null>(null);
   const [totalPoints, setTotalPoints] = useState(0);
   const [rounds, setRounds] = useState<RoundBreakdown[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const renderAvatar = (avatar: string | null, name: string) => {
+    if (avatar && avatar.startsWith("http")) {
+      // Photo URL
+      return (
+        <img
+          src={avatar}
+          alt={name}
+          style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: `3px solid ${GOLD}`, boxShadow: `0 0 0 3px ${DARK_GREEN}` }}
+        />
+      );
+    }
+    if (avatar) {
+      // Emoji
+      return (
+        <div style={{ width: 72, height: 72, borderRadius: "50%", background: `linear-gradient(135deg, ${GOLD}, #a8853a)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, boxShadow: `0 0 0 3px ${DARK_GREEN}, 0 0 0 5px ${GOLD}44` }}>
+          {avatar}
+        </div>
+      );
+    }
+    // Default initial
+    return (
+      <div style={{ width: 72, height: 72, borderRadius: "50%", background: `linear-gradient(135deg, ${GOLD}, #a8853a)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, fontWeight: 900, color: DARK_GREEN, boxShadow: `0 0 0 3px ${DARK_GREEN}, 0 0 0 5px ${GOLD}44` }}>
+        {name.charAt(0).toUpperCase()}
+      </div>
+    );
+  };
+
   useEffect(() => {
     const run = async () => {
-      const { data: players } = await supabase.from("players").select("id, name, base_handicap");
+      const { data: players } = await supabase.from("players").select("id, name, base_handicap, avatar");
       const { data: roundsData } = await supabase.from("rounds").select("id, name, scorecard_key, sort_order").order("sort_order");
       const { data: allScores } = await supabase.from("hole_scores").select("hole_no, strokes, player_id, round_id");
       const { data: allHoles } = await supabase.from("scorecard_holes").select("hole_no, par, stroke_index, scorecard_key");
@@ -51,6 +79,7 @@ function PlayerDetailInner() {
       const player = players.find((p) => p.id === playerId);
       if (!player) return;
       setPlayerName(player.name);
+      setPlayerAvatar(player.avatar ?? null);
 
       const lowestHandicap = Math.min(...players.map((p) => p.base_handicap ?? 0));
       const hcp = calcRelativeHandicap(player.base_handicap ?? 0, lowestHandicap);
@@ -112,7 +141,7 @@ function PlayerDetailInner() {
           details.push(`${emoji} ${label} on hole ${award.hole_no} (+1)`);
         });
 
-        // Low gross round points — only compare players with same or more holes played
+        // Low gross round points
         const allPlayerTotals = players.map((p) => {
           const ps = allScores.filter((s) => s.player_id === p.id && s.round_id === round.id);
           if (ps.length === 0) return null;
@@ -215,8 +244,8 @@ function PlayerDetailInner() {
         <button onClick={() => router.push("/leaderboard")} style={{ position: "absolute", left: 20, top: 18, background: "none", border: "none", color: GOLD, fontSize: 20, cursor: "pointer" }}>←</button>
         {!loading && (
           <>
-            <div style={{ width: 64, height: 64, borderRadius: "50%", background: `linear-gradient(135deg, ${GOLD}, #a8853a)`, margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 900, color: DARK_GREEN, boxShadow: `0 0 0 3px ${DARK_GREEN}, 0 0 0 5px ${GOLD}44` }}>
-              {playerName.charAt(0)}
+            <div style={{ margin: "0 auto 12px", width: "fit-content" }}>
+              {renderAvatar(playerAvatar, playerName)}
             </div>
             <h1 style={{ color: WHITE, fontSize: 22, fontWeight: 900, margin: 0, letterSpacing: 2, textTransform: "uppercase" }}>{playerName}</h1>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 8, background: RED, borderRadius: 8, padding: "4px 16px" }}>
