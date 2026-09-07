@@ -126,7 +126,7 @@ function RoundPageInner() {
     };
 
     run();
-    const channel = supabase.channel("round-scores")
+    const channel = supabase.channel("round-scores-" + Date.now())
       .on("postgres_changes", { event: "*", schema: "public", table: "hole_scores" }, () => { loadAllScores(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -200,14 +200,16 @@ function RoundPageInner() {
     if (!playerId || !roundId) return;
     const existing = specialAwards.find((a) => a.hole_no === holeNo && a.type === type && a.player_id === playerId);
     if (existing) {
+      // Player unclaims their own award
       await supabase.from("special_awards").delete().eq("id", existing.id);
       setSpecialAwards((prev) => prev.filter((a) => a.id !== existing.id));
       return;
     }
-    const others = specialAwards.filter((a) => a.hole_no === holeNo && a.type === type);
+    // Remove any existing unconfirmed claim by another player
+    const others = specialAwards.filter((a) => a.hole_no === holeNo && a.type === type && !a.confirmed);
     for (const o of others) await supabase.from("special_awards").delete().eq("id", o.id);
     const { data } = await supabase.from("special_awards").insert({ round_id: roundId, hole_no: holeNo, player_id: playerId, type, confirmed: false }).select().single();
-    if (data) setSpecialAwards((prev) => [...prev.filter((a) => !(a.hole_no === holeNo && a.type === type)), data]);
+    if (data) setSpecialAwards((prev) => [...prev.filter((a) => !(a.hole_no === holeNo && a.type === type && !a.confirmed)), data]);
   };
 
   const getScoreLabel = (strokes: number | null, par: number, strokeIndex: number | null, handicap: number, holeNo: number) => {
@@ -273,6 +275,9 @@ function RoundPageInner() {
   const individualLeaderboard = getIndividualRoundLeaderboard();
   const strokeHoles = holes.filter(h => !isSandCreek && getStrokes(relativeHandicap, h.stroke_index, h.hole_no) > 0);
 
+  const formatRelToPar = (rel: number) =>
+    rel === 0 ? "E" : rel > 0 ? `+${rel}` : `${rel}`;
+
   const tabs = [
     { key: "score", label: "MY SCORE" },
     ...(!isSandCreek ? [
@@ -295,9 +300,6 @@ function RoundPageInner() {
       </div>
     </div>
   );
-
-  const formatRelToPar = (rel: number) =>
-    rel === 0 ? "E" : rel > 0 ? `+${rel}` : `${rel}`;
 
   return (
     <main style={{ minHeight: "100vh", background: BG, fontFamily: "Arial, sans-serif" }}>
@@ -403,14 +405,35 @@ function RoundPageInner() {
                             const claimed = specialAwards.find((a) => a.hole_no === hole.hole_no && a.type === sh.type);
                             const claimedByMe = claimed?.player_id === playerId;
                             const claimedByOther = claimed && !claimedByMe;
+                            const isConfirmed = claimed?.confirmed ?? false;
+
                             return (
-                              <button key={sh.type} onClick={() => claimAward(hole.hole_no, sh.type)} disabled={!!claimedByOther}
-                                style={{ marginTop: 10, width: "100%", padding: "10px 12px", borderRadius: 10, border: claimedByMe ? `2px solid ${GREEN}` : claimedByOther ? `2px solid #e5e7eb` : `2px solid ${GOLD}`, background: claimedByMe ? LIGHT_GREEN : claimedByOther ? "#f9fafb" : "#fffbeb", cursor: claimedByOther ? "default" : "pointer", fontSize: 13, fontWeight: 800, color: claimedByMe ? GREEN : claimedByOther ? GRAY : DARK_GREEN, textAlign: "left", letterSpacing: 0.5 }}>
-                                {sh.type === "longest_drive" ? "🚗 LONGEST DRIVE" : "📍 CLOSEST TO PIN"}
-                                {claimedByMe && " — CLAIMED ✓"}
-                                {claimedByOther && " — CLAIMED BY ANOTHER"}
-                                {!claimed && " — TAP TO CLAIM"}
-                              </button>
+                              <div key={sh.type} style={{ marginTop: 10 }}>
+                                <button
+                                  onClick={() => !isConfirmed || claimedByMe ? claimAward(hole.hole_no, sh.type) : undefined}
+                                  disabled={!!claimedByOther && isConfirmed}
+                                  style={{
+                                    width: "100%", padding: "9px 12px", borderRadius: 10,
+                                    border: claimedByMe ? `2px solid ${GREEN}` : claimedByOther ? `2px solid #e5e7eb` : `2px solid ${GOLD}`,
+                                    background: claimedByMe ? LIGHT_GREEN : claimedByOther ? "#f9fafb" : "#fffbeb",
+                                    cursor: (!!claimedByOther && isConfirmed) ? "default" : "pointer",
+                                    fontSize: 12, fontWeight: 800,
+                                    color: claimedByMe ? GREEN : claimedByOther ? GRAY : DARK_GREEN,
+                                    textAlign: "left", letterSpacing: 0.5,
+                                    display: "flex", justifyContent: "space-between", alignItems: "center"
+                                  }}>
+                                  <span>
+                                    {sh.type === "longest_drive" ? "🚗 LONGEST DRIVE" : "📍 CLOSEST TO PIN"}
+                                    {claimedByMe && !isConfirmed && " — CLAIMED ✓ (tap to undo)"}
+                                    {claimedByMe && isConfirmed && " — CONFIRMED ✓"}
+                                    {claimedByOther && " — CLAIMED BY ANOTHER"}
+                                    {!claimed && " — TAP TO CLAIM"}
+                                  </span>
+                                  {claimedByMe && !isConfirmed && (
+                                    <span style={{ fontSize: 14, color: "#ef4444", fontWeight: 900 }}>✕</span>
+                                  )}
+                                </button>
+                              </div>
                             );
                           })}
                         </div>
@@ -447,9 +470,7 @@ function RoundPageInner() {
                       return (
                         <div key={entry.team.id} style={{ borderBottom: `1px solid ${GOLD}22` }}>
                           <div style={{ display: "flex", alignItems: "center", padding: "14px 16px", background: isFirst ? `linear-gradient(90deg, ${GREEN}cc, ${DARK_GREEN}cc)` : `${DARK_GREEN}99` }}>
-                            <div style={{ width: 40, fontSize: isFirst ? 22 : 16, fontWeight: 900, color: isFirst ? GOLD : `${GOLD}88`, textAlign: "center" }}>
-                              {medal}
-                            </div>
+                            <div style={{ width: 40, fontSize: isFirst ? 22 : 16, fontWeight: 900, color: isFirst ? GOLD : `${GOLD}88`, textAlign: "center" }}>{medal}</div>
                             <div style={{ flex: 1 }}>
                               <div style={{ fontSize: 17, fontWeight: 900, color: WHITE, letterSpacing: 0.5, textTransform: "uppercase" }}>{entry.team.name}</div>
                               <div style={{ fontSize: 12, color: `${WHITE}66`, fontWeight: 600, marginTop: 2 }}>{entry.members.map(m => m.name).join(" · ")}</div>
@@ -460,15 +481,12 @@ function RoundPageInner() {
                               </div>
                             </div>
                             <div style={{ width: 60, textAlign: "center" }}>
-                              <span style={{ fontSize: 22, fontWeight: 900, color: WHITE }}>
-                                {entry.holesPlayed > 0 ? entry.holesPlayed : "—"}
-                              </span>
+                              <span style={{ fontSize: 22, fontWeight: 900, color: WHITE }}>{entry.holesPlayed > 0 ? entry.holesPlayed : "—"}</span>
                             </div>
                           </div>
                         </div>
                       );
                     })}
-
                     <PointsInfoBox label="TEAM COMPETITION POINTS" />
                   </div>
                 )}
@@ -497,9 +515,7 @@ function RoundPageInner() {
                       return (
                         <div key={entry.player.id} style={{ borderBottom: `1px solid ${GOLD}22` }}>
                           <div style={{ display: "flex", alignItems: "center", padding: "14px 16px", background: isFirst ? `linear-gradient(90deg, ${GREEN}cc, ${DARK_GREEN}cc)` : `${DARK_GREEN}99` }}>
-                            <div style={{ width: 40, fontSize: isFirst ? 22 : 16, fontWeight: 900, color: isFirst ? GOLD : `${GOLD}88`, textAlign: "center" }}>
-                              {medal ?? `${index + 1}`}
-                            </div>
+                            <div style={{ width: 40, fontSize: isFirst ? 22 : 16, fontWeight: 900, color: isFirst ? GOLD : `${GOLD}88`, textAlign: "center" }}>{medal ?? `${index + 1}`}</div>
                             <div style={{ flex: 1 }}>
                               <div style={{ fontSize: 17, fontWeight: 900, color: WHITE, letterSpacing: 0.5, textTransform: "uppercase" }}>{entry.player.name}</div>
                             </div>
@@ -509,15 +525,12 @@ function RoundPageInner() {
                               </div>
                             </div>
                             <div style={{ width: 60, textAlign: "center" }}>
-                              <span style={{ fontSize: 22, fontWeight: 900, color: WHITE }}>
-                                {entry.holesPlayed}
-                              </span>
+                              <span style={{ fontSize: 22, fontWeight: 900, color: WHITE }}>{entry.holesPlayed}</span>
                             </div>
                           </div>
                         </div>
                       );
                     })}
-
                     <PointsInfoBox label="LOW ROUND INDIVIDUAL POINTS" />
                   </div>
                 )}
@@ -549,9 +562,7 @@ function RoundPageInner() {
                         <div key={hole.hole_no} style={{ background: WHITE, borderRadius: 12, overflow: "hidden", border: `2px solid ${GOLD}` }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: GOLD }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <div style={{ width: 34, height: 34, borderRadius: 8, background: DARK_GREEN, display: "flex", alignItems: "center", justifyContent: "center", color: GOLD, fontSize: 15, fontWeight: 900 }}>
-                                {hole.hole_no}
-                              </div>
+                              <div style={{ width: 34, height: 34, borderRadius: 8, background: DARK_GREEN, display: "flex", alignItems: "center", justifyContent: "center", color: GOLD, fontSize: 15, fontWeight: 900 }}>{hole.hole_no}</div>
                               <div>
                                 <div style={{ fontSize: 14, fontWeight: 900, color: DARK_GREEN }}>HOLE {hole.hole_no} · PAR {hole.par}</div>
                                 <div style={{ fontSize: 12, color: `${DARK_GREEN}99`, fontWeight: 700 }}>SI {hole.stroke_index}</div>
@@ -571,9 +582,7 @@ function RoundPageInner() {
                       {holes.filter(h => getStrokes(relativeHandicap, h.stroke_index, h.hole_no) === 0).sort((a, b) => a.hole_no - b.hole_no).map((hole) => (
                         <div key={hole.hole_no} style={{ background: `${DARK_GREEN}55`, borderRadius: 12, padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${GOLD}22` }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ width: 30, height: 30, borderRadius: 6, background: DARK_GREEN, display: "flex", alignItems: "center", justifyContent: "center", color: `${GOLD}88`, fontSize: 13, fontWeight: 900, border: `1px solid ${GOLD}33` }}>
-                              {hole.hole_no}
-                            </div>
+                            <div style={{ width: 30, height: 30, borderRadius: 6, background: DARK_GREEN, display: "flex", alignItems: "center", justifyContent: "center", color: `${GOLD}88`, fontSize: 13, fontWeight: 900, border: `1px solid ${GOLD}33` }}>{hole.hole_no}</div>
                             <span style={{ fontSize: 14, fontWeight: 700, color: `${GOLD}88` }}>HOLE {hole.hole_no} · PAR {hole.par} · SI {hole.stroke_index}</span>
                           </div>
                           <span style={{ fontSize: 12, color: `${GOLD}55`, fontWeight: 700 }}>NO STROKE</span>

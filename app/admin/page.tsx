@@ -155,30 +155,24 @@ function AdminInner() {
     if (!award) return;
     const player = players.find((p) => p.id === award.player_id);
     if (!player) return;
-
-    const { data: tripData } = await supabase
-      .from("players")
-      .select("trip_id")
-      .eq("id", award.player_id)
-      .maybeSingle();
+    const { data: tripData } = await supabase.from("players").select("trip_id").eq("id", award.player_id).maybeSingle();
     if (!tripData) return;
-
     const emoji = award.type === "longest_drive" ? "🚗" : "📍";
     const label = award.type === "longest_drive" ? "LONGEST DRIVE" : "CLOSEST TO PIN";
     const autoMessage = `${emoji} ${label}! ${player.name} wins ${label.toLowerCase()} on hole ${award.hole_no} — +1 point!`;
+    await supabase.from("posts").insert({ player_id: award.player_id, trip_id: tripData.trip_id, content: autoMessage, post_type: "auto" });
+  };
 
-    await supabase.from("posts").insert({
-      player_id: award.player_id,
-      trip_id: tripData.trip_id,
-      content: autoMessage,
-      post_type: "auto",
-    });
+  const undoAward = async (awardId: string) => {
+    await supabase.from("special_awards").update({ confirmed: false }).eq("id", awardId);
+    setSpecialAwards((prev) => prev.map((a) => a.id === awardId ? { ...a, confirmed: false } : a));
+    setMessage("Award unconfirmed — point removed.");
   };
 
   const denyAward = async (awardId: string) => {
     await supabase.from("special_awards").delete().eq("id", awardId);
     setSpecialAwards((prev) => prev.filter((a) => a.id !== awardId));
-    setMessage("Award denied.");
+    setMessage("Award denied and removed.");
   };
 
   const archiveYearToHistory = async () => {
@@ -391,7 +385,6 @@ function AdminInner() {
                     {roundTeams.map((team) => (
                       <div key={team.id} style={{ border: `1px solid ${GREEN}33`, borderRadius: 12, padding: "14px", background: LIGHT_GREEN }}>
                         <h3 style={{ fontWeight: "bold", marginBottom: 10, fontSize: 15, color: GREEN }}>{team.name}</h3>
-
                         <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
                           <label style={{ fontSize: 13, fontWeight: "bold", color: GRAY, whiteSpace: "nowrap" }}>🕒 Tee Time:</label>
                           <input
@@ -406,7 +399,6 @@ function AdminInner() {
                             Save
                           </button>
                         </div>
-
                         <div style={{ display: "grid", gap: 6 }}>
                           {players.map((player) => {
                             const isOnThisTeam = getPlayerTeam(player.id, selectedRound) === team.id;
@@ -487,7 +479,17 @@ function AdminInner() {
                                 </div>
                               </div>
                               {award.confirmed ? (
-                                <span style={{ color: GREEN, fontWeight: "bold", fontSize: 13, background: WHITE, padding: "4px 10px", borderRadius: 8 }}>✓ Confirmed</span>
+                                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                  <span style={{ color: GREEN, fontWeight: "bold", fontSize: 13, background: WHITE, padding: "4px 10px", borderRadius: 8 }}>✓ Confirmed</span>
+                                  <button onClick={() => undoAward(award.id)}
+                                    style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "#f97316", color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: "bold" }}>
+                                    ↩ Undo
+                                  </button>
+                                  <button onClick={() => denyAward(award.id)}
+                                    style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "#ef4444", color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: "bold" }}>
+                                    ✕
+                                  </button>
+                                </div>
                               ) : (
                                 <div style={{ display: "flex", gap: 8 }}>
                                   <button onClick={() => confirmAward(award.id)} style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: GREEN, color: WHITE, cursor: "pointer", fontSize: 13, fontWeight: "bold" }}>✓</button>
@@ -527,6 +529,7 @@ function AdminInner() {
             </div>
           )}
         </div>
+
       </div>
     </main>
   );
