@@ -255,9 +255,13 @@ function RoundPageInner() {
   const getIndividualRoundLeaderboard = () => {
     return players.map((player) => {
       const playerScores = allScores.filter((s) => s.player_id === player.id);
-      const total = playerScores.reduce((sum, s) => sum + s.strokes, 0);
-      return { player, total, holesPlayed: playerScores.length };
-    }).filter((p) => p.holesPlayed > 0).sort((a, b) => a.total - b.total);
+      const totalStrokes = playerScores.reduce((sum, s) => sum + s.strokes, 0);
+      const parTotal = holes
+        .filter((h) => playerScores.some((s) => s.hole_no === h.hole_no))
+        .reduce((sum, h) => sum + h.par, 0);
+      const relativeToPar = totalStrokes - parTotal;
+      return { player, totalStrokes, relativeToPar, holesPlayed: playerScores.length };
+    }).filter((p) => p.holesPlayed > 0).sort((a, b) => a.relativeToPar - b.relativeToPar);
   };
 
   const totalStrokes = scores.reduce((sum, s) => sum + (s.strokes ?? 0), 0);
@@ -291,6 +295,9 @@ function RoundPageInner() {
       </div>
     </div>
   );
+
+  const formatRelToPar = (rel: number) =>
+    rel === 0 ? "E" : rel > 0 ? `+${rel}` : `${rel}`;
 
   return (
     <main style={{ minHeight: "100vh", background: BG, fontFamily: "Arial, sans-serif" }}>
@@ -433,7 +440,7 @@ function RoundPageInner() {
                         .filter((h) => allScores.some((s) => entry.members.some((m) => s.player_id === m.id && s.hole_no === h.hole_no)))
                         .reduce((sum, h) => sum + h.par, 0);
                       const diff = entry.holesPlayed > 0 ? entry.bestBallTotal - parTotal : null;
-                      const diffStr = diff === null ? "—" : diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`;
+                      const diffStr = diff === null ? "—" : formatRelToPar(diff);
                       const isFirst = index === 0;
                       const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉";
 
@@ -447,13 +454,11 @@ function RoundPageInner() {
                               <div style={{ fontSize: 17, fontWeight: 900, color: WHITE, letterSpacing: 0.5, textTransform: "uppercase" }}>{entry.team.name}</div>
                               <div style={{ fontSize: 12, color: `${WHITE}66`, fontWeight: 600, marginTop: 2 }}>{entry.members.map(m => m.name).join(" · ")}</div>
                             </div>
-                            {/* Score — red box if under par, plain white if even/over */}
                             <div style={{ width: 80, textAlign: "center" }}>
                               <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: diff !== null && diff < 0 ? RED : "transparent", borderRadius: 6, minWidth: 44, padding: "4px 10px" }}>
                                 <span style={{ fontSize: 22, fontWeight: 900, color: WHITE }}>{diffStr}</span>
                               </div>
                             </div>
-                            {/* Thru — same size as score, white */}
                             <div style={{ width: 60, textAlign: "center" }}>
                               <span style={{ fontSize: 22, fontWeight: 900, color: WHITE }}>
                                 {entry.holesPlayed > 0 ? entry.holesPlayed : "—"}
@@ -487,6 +492,7 @@ function RoundPageInner() {
                     {individualLeaderboard.map((entry, index) => {
                       const isFirst = index === 0;
                       const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : null;
+                      const relStr = formatRelToPar(entry.relativeToPar);
 
                       return (
                         <div key={entry.player.id} style={{ borderBottom: `1px solid ${GOLD}22` }}>
@@ -497,13 +503,11 @@ function RoundPageInner() {
                             <div style={{ flex: 1 }}>
                               <div style={{ fontSize: 17, fontWeight: 900, color: WHITE, letterSpacing: 0.5, textTransform: "uppercase" }}>{entry.player.name}</div>
                             </div>
-                            {/* Score — always red box */}
                             <div style={{ width: 80, textAlign: "center" }}>
-                              <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: RED, borderRadius: 6, minWidth: 44, padding: "4px 10px" }}>
-                                <span style={{ fontSize: 22, fontWeight: 900, color: WHITE }}>{entry.total}</span>
+                              <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: entry.relativeToPar < 0 ? RED : "transparent", borderRadius: 6, minWidth: 44, padding: "4px 10px" }}>
+                                <span style={{ fontSize: 22, fontWeight: 900, color: WHITE }}>{relStr}</span>
                               </div>
                             </div>
-                            {/* Thru — same size as score, white */}
                             <div style={{ width: 60, textAlign: "center" }}>
                               <span style={{ fontSize: 22, fontWeight: 900, color: WHITE }}>
                                 {entry.holesPlayed}
