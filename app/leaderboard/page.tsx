@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -24,7 +24,7 @@ function LeaderboardInner() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const calculate = async () => {
+  const calculate = useCallback(async () => {
     const { data: players } = await supabase.from("players").select("id, name, base_handicap");
     const { data: rounds } = await supabase.from("rounds").select("id, name, scorecard_key, sort_order").order("sort_order");
     const { data: scores } = await supabase.from("hole_scores").select("hole_no, strokes, player_id, round_id");
@@ -161,16 +161,18 @@ function LeaderboardInner() {
     setLeaderboard(result);
     setLastUpdated(new Date());
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     calculate();
-    const channel = supabase.channel("lb")
+    const channel = supabase.channel("lb-" + Date.now())
       .on("postgres_changes", { event: "*", schema: "public", table: "hole_scores" }, () => calculate())
       .on("postgres_changes", { event: "*", schema: "public", table: "special_awards" }, () => calculate())
+      .on("postgres_changes", { event: "*", schema: "public", table: "teams" }, () => calculate())
+      .on("postgres_changes", { event: "*", schema: "public", table: "team_players" }, () => calculate())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [calculate]);
 
   return (
     <main style={{ minHeight: "100vh", background: BG, fontFamily: "Arial, sans-serif" }}>
