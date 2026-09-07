@@ -198,6 +198,7 @@ pts += playerAwards.length;
             const allTotals = allTripPlayers.map((p) => {
               const ps = scoresData.filter((s) => s.player_id === p.id && s.round_id === round.id);
               if (ps.length === 0) return null;
+              if (ps.length < playerScores.length) return null;
               return { id: p.id, total: ps.reduce((s, x) => s + x.strokes, 0) };
             }).filter(Boolean) as { id: string; total: number }[];
 
