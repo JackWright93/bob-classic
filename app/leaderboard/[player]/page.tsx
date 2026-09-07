@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -24,7 +24,7 @@ function LeaderboardInner() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const calculate = async () => {
+  const calculate = useCallback(async () => {
     const { data: players } = await supabase.from("players").select("id, name, base_handicap");
     const { data: rounds } = await supabase.from("rounds").select("id, name, scorecard_key, sort_order").order("sort_order");
     const { data: scores } = await supabase.from("hole_scores").select("hole_no, strokes, player_id, round_id");
@@ -89,17 +89,16 @@ function LeaderboardInner() {
         const confirmedAwards = (specialAwards ?? []).filter(
           a => a.player_id === player.id && a.round_id === round.id
         );
-        pts += confirmedAwards.length;
+        pts += confirmedAwards.length; // 1 point each
 
-        // Live low gross round points — only compare players who have played same number of holes
+        // Live low gross round points
         const allTotals = players.map(p => {
           const ps = scores.filter(s => s.player_id === p.id && s.round_id === round.id);
           if (ps.length === 0) return null;
-          if (ps.length < playerScores.length) return null;
           return { id: p.id, total: ps.reduce((s, x) => s + x.strokes, 0) };
         }).filter(Boolean) as { id: string; total: number }[];
 
-        if (allTotals.length >= 1) {
+        if (allTotals.length >= 2) {
           const sorted = [...allTotals].sort((a, b) => a.total - b.total);
           const pm: Record<number, number> = { 0: 3, 1: 2, 2: 1 };
           let i = 0;
@@ -162,16 +161,16 @@ function LeaderboardInner() {
     setLeaderboard(result);
     setLastUpdated(new Date());
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     calculate();
-    const channel = supabase.channel("lb")
+    const channel = supabase.channel("lb-" + Date.now())
       .on("postgres_changes", { event: "*", schema: "public", table: "hole_scores" }, () => calculate())
       .on("postgres_changes", { event: "*", schema: "public", table: "special_awards" }, () => calculate())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [calculate]);
 
   return (
     <main style={{ minHeight: "100vh", background: BG, fontFamily: "Arial, sans-serif" }}>
@@ -206,6 +205,7 @@ function LeaderboardInner() {
             {leaderboard.map((player, index) => {
               const isFirst = index === 0;
               const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : null;
+
               return (
                 <div key={player.id} onClick={() => router.push(`/leaderboard/${player.id}`)}
                   style={{ cursor: "pointer", borderBottom: `1px solid ${GOLD}22` }}>

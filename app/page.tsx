@@ -269,7 +269,17 @@ pts += playerAwards.length;
 
     run();
     const { data: { subscription } } = supabase.auth.onAuthStateChange(() => { run(); });
-    return () => { subscription.unsubscribe(); };
+
+    const channel = supabase
+      .channel("home-" + Date.now())
+      .on("postgres_changes", { event: "*", schema: "public", table: "hole_scores" }, () => { run(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "special_awards" }, () => { run(); })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   return (
