@@ -149,6 +149,30 @@ function AdminInner() {
     await supabase.from("special_awards").update({ confirmed: true }).eq("id", awardId);
     setSpecialAwards((prev) => prev.map((a) => a.id === awardId ? { ...a, confirmed: true } : a));
     setMessage("Award confirmed! 1 point awarded.");
+
+    // Auto post to feed
+    const award = specialAwards.find((a) => a.id === awardId);
+    if (!award) return;
+    const player = players.find((p) => p.id === award.player_id);
+    if (!player) return;
+
+    const { data: tripData } = await supabase
+      .from("players")
+      .select("trip_id")
+      .eq("id", award.player_id)
+      .maybeSingle();
+    if (!tripData) return;
+
+    const emoji = award.type === "longest_drive" ? "🚗" : "📍";
+    const label = award.type === "longest_drive" ? "LONGEST DRIVE" : "CLOSEST TO PIN";
+    const autoMessage = `${emoji} ${label}! ${player.name} wins ${label.toLowerCase()} on hole ${award.hole_no} — +1 point!`;
+
+    await supabase.from("posts").insert({
+      player_id: award.player_id,
+      trip_id: tripData.trip_id,
+      content: autoMessage,
+      post_type: "auto",
+    });
   };
 
   const denyAward = async (awardId: string) => {
@@ -175,7 +199,6 @@ function AdminInner() {
       const calcRelHcp = (h: number) => Math.max(0, Math.round(h - lowest));
       const getSR = (hcp: number, si: number | null) => (!si ? 0 : Math.floor(hcp / 18) + (si <= hcp % 18 ? 1 : 0));
 
-      // Total points per player (mirrors the live leaderboard's scoring exactly)
       const totals: Record<string, number> = {};
       allPlayers.forEach((player) => {
         const hcp = calcRelHcp(player.base_handicap ?? 0);
@@ -228,7 +251,6 @@ function AdminInner() {
         .map((p) => ({ id: p.id, name: p.name, points: totals[p.id] ?? 0 }))
         .sort((a, b) => b.points - a.points);
 
-      // Find or create this year's historical_winners row
       let { data: existing } = await supabase.from("historical_winners").select("id").eq("year", archiveYear).maybeSingle();
       let historicalId = existing?.id;
       if (!historicalId) {
@@ -245,7 +267,6 @@ function AdminInner() {
         return;
       }
 
-      // Clear and rewrite standings + course scores (safe to re-run any time during/after the trip)
       await supabase.from("historical_standings").delete().eq("historical_winner_id", historicalId);
       await supabase.from("historical_course_scores").delete().eq("historical_winner_id", historicalId);
 
@@ -273,7 +294,6 @@ function AdminInner() {
       });
       if (courseRows.length > 0) await supabase.from("historical_course_scores").insert(courseRows);
 
-      // Update the winner record itself
       const champion = ranked[0];
       await supabase.from("historical_winners").update({
         winner_name: champion ? champion.name : "TBD",
@@ -296,7 +316,6 @@ function AdminInner() {
   return (
     <main style={{ minHeight: "100vh", background: "#f5f7f5", fontFamily: "Arial, sans-serif" }}>
 
-      {/* Header */}
       <div style={{ background: GREEN, padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
         <button onClick={() => router.push("/")} style={{ background: "none", border: "none", color: WHITE, fontSize: 20, cursor: "pointer", padding: 0 }}>←</button>
         <h1 style={{ color: WHITE, fontSize: 20, fontWeight: "bold", margin: 0 }}>⚙️ Admin Panel</h1>
