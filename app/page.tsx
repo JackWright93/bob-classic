@@ -202,7 +202,7 @@ pts += playerAwards.length;
               return { id: p.id, total: ps.reduce((s, x) => s + x.strokes, 0) };
             }).filter(Boolean) as { id: string; total: number }[];
 
-            if (allTotals.length >= 2) {
+            if (allTotals.length >= 1) {
               const sorted = [...allTotals].sort((a, b) => a.total - b.total);
               const pm: Record<number, number> = { 0: 3, 1: 2, 2: 1 };
               let i = 0;
