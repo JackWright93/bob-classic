@@ -278,7 +278,6 @@ function RoundPageInner() {
     ] : [])
   ];
 
-  // Shared points info box
   const PointsInfoBox = ({ label }: { label: string }) => (
     <div style={{ background: DARK_GREEN, padding: "12px 16px", borderTop: `1px solid ${GOLD}33` }}>
       <div style={{ fontSize: 11, color: `${GOLD}99`, letterSpacing: 1, fontWeight: 700, textAlign: "center", marginBottom: 10 }}>{label}</div>
@@ -309,7 +308,6 @@ function RoundPageInner() {
 
         {!loading && !error && (
           <>
-            {/* Tabs */}
             <div style={{ display: "flex", gap: 4, marginBottom: 16, background: `${DARK_GREEN}cc`, borderRadius: 14, padding: 4, border: `1px solid ${GOLD}44` }}>
               {tabs.map((tab) => (
                 <button key={tab.key} onClick={() => setActiveTab(tab.key as typeof activeTab)}
@@ -423,12 +421,11 @@ function RoundPageInner() {
                   <div style={{ background: `${DARK_GREEN}cc`, borderRadius: 14, padding: 24, textAlign: "center", color: GOLD, border: `1px solid ${GOLD}44` }}>Teams not set up yet for this round.</div>
                 ) : (
                   <div style={{ borderRadius: 16, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}>
-                    {/* Header row */}
                     <div style={{ background: DARK_GREEN, padding: "10px 16px", display: "flex", alignItems: "center", borderBottom: `1px solid ${GOLD}44` }}>
                       <div style={{ width: 40 }} />
                       <div style={{ flex: 1, fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>TEAM</div>
-                      <div style={{ width: 70, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>SCORE</div>
-                      <div style={{ width: 52, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>THRU</div>
+                      <div style={{ width: 80, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>SCORE</div>
+                      <div style={{ width: 60, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>THRU</div>
                     </div>
 
                     {teamLeaderboard.map((entry, index) => {
@@ -437,8 +434,6 @@ function RoundPageInner() {
                         .reduce((sum, h) => sum + h.par, 0);
                       const diff = entry.holesPlayed > 0 ? entry.bestBallTotal - parTotal : null;
                       const diffStr = diff === null ? "—" : diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`;
-                      // White for over par, red for under par
-                      const diffColor = diff === null ? `${WHITE}55` : diff < 0 ? RED : WHITE;
                       const isFirst = index === 0;
                       const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉";
 
@@ -452,11 +447,17 @@ function RoundPageInner() {
                               <div style={{ fontSize: 17, fontWeight: 900, color: WHITE, letterSpacing: 0.5, textTransform: "uppercase" }}>{entry.team.name}</div>
                               <div style={{ fontSize: 12, color: `${WHITE}66`, fontWeight: 600, marginTop: 2 }}>{entry.members.map(m => m.name).join(" · ")}</div>
                             </div>
-                            <div style={{ width: 70, textAlign: "center" }}>
-                              <span style={{ fontSize: 22, fontWeight: 900, color: diffColor }}>{diffStr}</span>
+                            {/* Score — red box if under par, plain white if even/over */}
+                            <div style={{ width: 80, textAlign: "center" }}>
+                              <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: diff !== null && diff < 0 ? RED : "transparent", borderRadius: 6, minWidth: 44, padding: "4px 10px" }}>
+                                <span style={{ fontSize: 22, fontWeight: 900, color: WHITE }}>{diffStr}</span>
+                              </div>
                             </div>
-                            <div style={{ width: 52, textAlign: "center", fontSize: 14, color: `${GOLD}88`, fontWeight: 700 }}>
-                              {entry.holesPlayed > 0 ? entry.holesPlayed : "—"}
+                            {/* Thru — same size as score, white */}
+                            <div style={{ width: 60, textAlign: "center" }}>
+                              <span style={{ fontSize: 22, fontWeight: 900, color: WHITE }}>
+                                {entry.holesPlayed > 0 ? entry.holesPlayed : "—"}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -476,12 +477,11 @@ function RoundPageInner() {
                   <div style={{ background: `${DARK_GREEN}cc`, borderRadius: 14, padding: 24, textAlign: "center", color: GOLD, border: `1px solid ${GOLD}44` }}>No scores entered yet.</div>
                 ) : (
                   <div style={{ borderRadius: 16, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}>
-                    {/* Header row */}
                     <div style={{ background: DARK_GREEN, padding: "10px 16px", display: "flex", alignItems: "center", borderBottom: `1px solid ${GOLD}44` }}>
                       <div style={{ width: 40 }} />
                       <div style={{ flex: 1, fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>PLAYER</div>
-                      <div style={{ width: 70, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>SCORE</div>
-                      <div style={{ width: 52, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>THRU</div>
+                      <div style={{ width: 80, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>SCORE</div>
+                      <div style={{ width: 60, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>THRU</div>
                     </div>
 
                     {individualLeaderboard.map((entry, index) => {
@@ -497,13 +497,17 @@ function RoundPageInner() {
                             <div style={{ flex: 1 }}>
                               <div style={{ fontSize: 17, fontWeight: 900, color: WHITE, letterSpacing: 0.5, textTransform: "uppercase" }}>{entry.player.name}</div>
                             </div>
-                            <div style={{ width: 70, textAlign: "center" }}>
+                            {/* Score — always red box */}
+                            <div style={{ width: 80, textAlign: "center" }}>
                               <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", background: RED, borderRadius: 6, minWidth: 44, padding: "4px 10px" }}>
-                                <span style={{ fontSize: 20, fontWeight: 900, color: WHITE }}>{entry.total}</span>
+                                <span style={{ fontSize: 22, fontWeight: 900, color: WHITE }}>{entry.total}</span>
                               </div>
                             </div>
-                            <div style={{ width: 52, textAlign: "center", fontSize: 14, color: `${GOLD}88`, fontWeight: 700 }}>
-                              {entry.holesPlayed}
+                            {/* Thru — same size as score, white */}
+                            <div style={{ width: 60, textAlign: "center" }}>
+                              <span style={{ fontSize: 22, fontWeight: 900, color: WHITE }}>
+                                {entry.holesPlayed}
+                              </span>
                             </div>
                           </div>
                         </div>
