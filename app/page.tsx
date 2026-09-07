@@ -135,6 +135,10 @@ export default function Home() {
       const { data: holesData } = await supabase.from("scorecard_holes").select("hole_no, par, stroke_index, scorecard_key");
       const { data: teamsData } = await supabase.from("teams").select("id, name, round_id");
       const { data: teamPlayersData } = await supabase.from("team_players").select("team_id, player_id");
+      const { data: awardsData } = await supabase
+  .from("special_awards")
+  .select("player_id, round_id")
+  .eq("confirmed", true);
 
       if (allTripPlayers && roundData && scoresData && holesData && teamsData && teamPlayersData) {
         const lowest = Math.min(...allTripPlayers.map((p) => p.base_handicap ?? 0));
@@ -185,7 +189,11 @@ export default function Home() {
               const t = playerScores.reduce((s, x) => s + x.strokes, 0);
               if (playerScores.length === 9 && t <= 27) pts += 1;
             }
-
+// Confirmed LD/CTP awards
+const playerAwards = (awardsData ?? []).filter(
+  a => a.player_id === player.id && a.round_id === round.id
+);
+pts += playerAwards.length;
             // Live low gross round points
             const allTotals = allTripPlayers.map((p) => {
               const ps = scoresData.filter((s) => s.player_id === p.id && s.round_id === round.id);
