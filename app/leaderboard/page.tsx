@@ -92,7 +92,7 @@ function LeaderboardInner() {
         );
         pts += confirmedAwards.length;
 
-        // Live low NET round points
+        // Live low NET round points — full points for all tied players
         const allTotals = players.map(p => {
           const ps = scores.filter(s => s.player_id === p.id && s.round_id === round.id);
           if (ps.length === 0) return null;
@@ -114,12 +114,11 @@ function LeaderboardInner() {
           while (i < sorted.length) {
             let j = i;
             while (j < sorted.length && sorted[j].total === sorted[i].total) j++;
-            const shared = Math.floor(
-              Array.from({ length: j - i }, (_, k) => pm[i + k] ?? 0).reduce((a, b) => a + b, 0) / (j - i)
-            );
-            if (shared > 0) {
+            // Full points for all tied players
+            const fullPts = pm[i] ?? 0;
+            if (fullPts > 0) {
               for (let k = i; k < j; k++) {
-                if (sorted[k].id === player.id) pts += shared;
+                if (sorted[k].id === player.id) pts += fullPts;
               }
             }
             i = j;
