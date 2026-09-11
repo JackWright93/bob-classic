@@ -33,7 +33,6 @@ function getStrokesReceived(relativeHandicap: number, strokeIndex: number | null
 
 function getStrokesReceived27(relativeHandicap: number, strokeIndex: number | null, holeNo: number) {
   if (!strokeIndex) return 0;
-  // Scale strokes by 1.5 for 27 holes, round up
   const scaledHcp = Math.ceil(relativeHandicap * 1.5);
   const nineGroup = holeNo <= 9 ? 0 : holeNo <= 18 ? 1 : 2;
   const fullRoundsOfSI = Math.floor(scaledHcp / 3);
@@ -254,16 +253,26 @@ function RoundPageInner() {
     });
   };
 
+  // Net score relative to par for individual leaderboard
   const getIndividualRoundLeaderboard = () => {
+    const lowestHandicap = players.length ? Math.min(...players.map((p) => p.base_handicap ?? 0)) : 0;
     return players.map((player) => {
       const playerScores = allScores.filter((s) => s.player_id === player.id);
-      const totalStrokes = playerScores.reduce((sum, s) => sum + s.strokes, 0);
+      if (playerScores.length === 0) return null;
+      const relHcp = calcRelativeHandicap(player.base_handicap ?? 0, lowestHandicap);
+      const netTotal = playerScores.reduce((sum, s) => {
+        const hole = holes.find(h => h.hole_no === s.hole_no);
+        if (!hole) return sum;
+        const sr = getStrokes(relHcp, hole.stroke_index, s.hole_no);
+        return sum + (s.strokes - sr);
+      }, 0);
       const parTotal = holes
         .filter((h) => playerScores.some((s) => s.hole_no === h.hole_no))
         .reduce((sum, h) => sum + h.par, 0);
-      const relativeToPar = totalStrokes - parTotal;
-      return { player, totalStrokes, relativeToPar, holesPlayed: playerScores.length };
-    }).filter((p) => p.holesPlayed > 0).sort((a, b) => a.relativeToPar - b.relativeToPar);
+      const relativeToPar = netTotal - parTotal;
+      return { player, relativeToPar, holesPlayed: playerScores.length };
+    }).filter((p): p is NonNullable<typeof p> => p !== null && p.holesPlayed > 0)
+      .sort((a, b) => a.relativeToPar - b.relativeToPar);
   };
 
   const totalStrokes = scores.reduce((sum, s) => sum + (s.strokes ?? 0), 0);
@@ -327,6 +336,7 @@ function RoundPageInner() {
               ))}
             </div>
 
+            {/* SCORE TAB */}
             {activeTab === "score" && (
               <>
                 <div style={{ background: GOLD, borderRadius: 14, padding: "12px 16px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 4px 12px rgba(201,168,76,0.3)" }}>
@@ -434,6 +444,7 @@ function RoundPageInner() {
               </>
             )}
 
+            {/* TEAM TAB */}
             {activeTab === "team" && (
               <div>
                 {teamLeaderboard.length === 0 ? (
@@ -480,6 +491,7 @@ function RoundPageInner() {
               </div>
             )}
 
+            {/* INDIVIDUAL TAB */}
             {activeTab === "individual" && (
               <div>
                 {individualLeaderboard.length === 0 ? (
@@ -521,6 +533,7 @@ function RoundPageInner() {
               </div>
             )}
 
+            {/* MY STROKES TAB */}
             {activeTab === "mystrokes" && (
               <div>
                 <div style={{ background: GOLD, borderRadius: 14, padding: "14px 16px", marginBottom: 16, boxShadow: "0 4px 12px rgba(201,168,76,0.3)" }}>
