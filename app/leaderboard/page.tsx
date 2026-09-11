@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -24,7 +24,7 @@ function LeaderboardInner() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const calculate = useCallback(async () => {
+  const calculate = async () => {
     const { data: players } = await supabase.from("players").select("id, name, base_handicap");
     const { data: rounds } = await supabase.from("rounds").select("id, name, scorecard_key, sort_order").order("sort_order");
     const { data: scores } = await supabase.from("hole_scores").select("hole_no, strokes, player_id, round_id");
@@ -40,9 +40,10 @@ function LeaderboardInner() {
     const getSR = (mHcp: number, si: number | null, holeNo: number, is27: boolean) => {
       if (!si) return 0;
       if (is27) {
+        const scaledHcp = Math.ceil(mHcp * 1.5);
         const nineGroup = holeNo <= 9 ? 0 : holeNo <= 18 ? 1 : 2;
-        const fullRounds = Math.floor(mHcp / 3);
-        const remainder = mHcp % 3;
+        const fullRounds = Math.floor(scaledHcp / 3);
+        const remainder = scaledHcp % 3;
         if (si <= fullRounds) return 1;
         if (si === fullRounds + 1 && nineGroup < remainder) return 1;
         return 0;
@@ -89,12 +90,13 @@ function LeaderboardInner() {
         const confirmedAwards = (specialAwards ?? []).filter(
           a => a.player_id === player.id && a.round_id === round.id
         );
-        pts += confirmedAwards.length; // 1 point each
+        pts += confirmedAwards.length;
 
         // Live low gross round points
         const allTotals = players.map(p => {
           const ps = scores.filter(s => s.player_id === p.id && s.round_id === round.id);
           if (ps.length === 0) return null;
+          if (ps.length < playerScores.length) return null;
           return { id: p.id, total: ps.reduce((s, x) => s + x.strokes, 0) };
         }).filter(Boolean) as { id: string; total: number }[];
 
@@ -161,18 +163,16 @@ function LeaderboardInner() {
     setLeaderboard(result);
     setLastUpdated(new Date());
     setLoading(false);
-  }, []);
+  };
 
   useEffect(() => {
     calculate();
     const channel = supabase.channel("lb-" + Date.now())
       .on("postgres_changes", { event: "*", schema: "public", table: "hole_scores" }, () => calculate())
       .on("postgres_changes", { event: "*", schema: "public", table: "special_awards" }, () => calculate())
-      .on("postgres_changes", { event: "*", schema: "public", table: "teams" }, () => calculate())
-      .on("postgres_changes", { event: "*", schema: "public", table: "team_players" }, () => calculate())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [calculate]);
+  }, []);
 
   return (
     <main style={{ minHeight: "100vh", background: BG, fontFamily: "Arial, sans-serif" }}>
@@ -207,7 +207,6 @@ function LeaderboardInner() {
             {leaderboard.map((player, index) => {
               const isFirst = index === 0;
               const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : null;
-
               return (
                 <div key={player.id} onClick={() => router.push(`/leaderboard/${player.id}`)}
                   style={{ cursor: "pointer", borderBottom: `1px solid ${GOLD}22` }}>

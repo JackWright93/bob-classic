@@ -33,9 +33,11 @@ function getStrokesReceived(relativeHandicap: number, strokeIndex: number | null
 
 function getStrokesReceived27(relativeHandicap: number, strokeIndex: number | null, holeNo: number) {
   if (!strokeIndex) return 0;
+  // Scale strokes by 1.5 for 27 holes, round up
+  const scaledHcp = Math.ceil(relativeHandicap * 1.5);
   const nineGroup = holeNo <= 9 ? 0 : holeNo <= 18 ? 1 : 2;
-  const fullRoundsOfSI = Math.floor(relativeHandicap / 3);
-  const remainder = relativeHandicap % 3;
+  const fullRoundsOfSI = Math.floor(scaledHcp / 3);
+  const remainder = scaledHcp % 3;
   if (strokeIndex <= fullRoundsOfSI) return 1;
   if (strokeIndex === fullRoundsOfSI + 1 && nineGroup < remainder) return 1;
   return 0;
@@ -200,12 +202,10 @@ function RoundPageInner() {
     if (!playerId || !roundId) return;
     const existing = specialAwards.find((a) => a.hole_no === holeNo && a.type === type && a.player_id === playerId);
     if (existing) {
-      // Player unclaims their own award
       await supabase.from("special_awards").delete().eq("id", existing.id);
       setSpecialAwards((prev) => prev.filter((a) => a.id !== existing.id));
       return;
     }
-    // Remove any existing unconfirmed claim by another player
     const others = specialAwards.filter((a) => a.hole_no === holeNo && a.type === type && !a.confirmed);
     for (const o of others) await supabase.from("special_awards").delete().eq("id", o.id);
     const { data } = await supabase.from("special_awards").insert({ round_id: roundId, hole_no: holeNo, player_id: playerId, type, confirmed: false }).select().single();
@@ -308,6 +308,7 @@ function RoundPageInner() {
         <div style={{ textAlign: "center" }}>
           <h1 style={{ color: WHITE, fontSize: 20, fontWeight: 900, margin: 0, letterSpacing: 1, textTransform: "uppercase" }}>{roundName}</h1>
           {isSandCreek && <p style={{ color: GOLD, fontSize: 12, margin: "4px 0 0", letterSpacing: 1 }}>9 HOLES · INDIVIDUAL · NO HANDICAP</p>}
+          {isShepherds && <p style={{ color: GOLD, fontSize: 12, margin: "4px 0 0", letterSpacing: 1 }}>27 HOLES · STROKES SCALED 1.5x</p>}
         </div>
       </div>
 
@@ -326,7 +327,6 @@ function RoundPageInner() {
               ))}
             </div>
 
-            {/* SCORE TAB */}
             {activeTab === "score" && (
               <>
                 <div style={{ background: GOLD, borderRadius: 14, padding: "12px 16px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 4px 12px rgba(201,168,76,0.3)" }}>
@@ -406,22 +406,12 @@ function RoundPageInner() {
                             const claimedByMe = claimed?.player_id === playerId;
                             const claimedByOther = claimed && !claimedByMe;
                             const isConfirmed = claimed?.confirmed ?? false;
-
                             return (
                               <div key={sh.type} style={{ marginTop: 10 }}>
                                 <button
                                   onClick={() => !isConfirmed || claimedByMe ? claimAward(hole.hole_no, sh.type) : undefined}
                                   disabled={!!claimedByOther && isConfirmed}
-                                  style={{
-                                    width: "100%", padding: "9px 12px", borderRadius: 10,
-                                    border: claimedByMe ? `2px solid ${GREEN}` : claimedByOther ? `2px solid #e5e7eb` : `2px solid ${GOLD}`,
-                                    background: claimedByMe ? LIGHT_GREEN : claimedByOther ? "#f9fafb" : "#fffbeb",
-                                    cursor: (!!claimedByOther && isConfirmed) ? "default" : "pointer",
-                                    fontSize: 12, fontWeight: 800,
-                                    color: claimedByMe ? GREEN : claimedByOther ? GRAY : DARK_GREEN,
-                                    textAlign: "left", letterSpacing: 0.5,
-                                    display: "flex", justifyContent: "space-between", alignItems: "center"
-                                  }}>
+                                  style={{ width: "100%", padding: "9px 12px", borderRadius: 10, border: claimedByMe ? `2px solid ${GREEN}` : claimedByOther ? `2px solid #e5e7eb` : `2px solid ${GOLD}`, background: claimedByMe ? LIGHT_GREEN : claimedByOther ? "#f9fafb" : "#fffbeb", cursor: (!!claimedByOther && isConfirmed) ? "default" : "pointer", fontSize: 12, fontWeight: 800, color: claimedByMe ? GREEN : claimedByOther ? GRAY : DARK_GREEN, textAlign: "left", letterSpacing: 0.5, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                   <span>
                                     {sh.type === "longest_drive" ? "🚗 LONGEST DRIVE" : "📍 CLOSEST TO PIN"}
                                     {claimedByMe && !isConfirmed && " — CLAIMED ✓ (tap to undo)"}
@@ -444,7 +434,6 @@ function RoundPageInner() {
               </>
             )}
 
-            {/* TEAM TAB */}
             {activeTab === "team" && (
               <div>
                 {teamLeaderboard.length === 0 ? (
@@ -457,7 +446,6 @@ function RoundPageInner() {
                       <div style={{ width: 80, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>SCORE</div>
                       <div style={{ width: 60, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>THRU</div>
                     </div>
-
                     {teamLeaderboard.map((entry, index) => {
                       const parTotal = holes
                         .filter((h) => allScores.some((s) => entry.members.some((m) => s.player_id === m.id && s.hole_no === h.hole_no)))
@@ -466,7 +454,6 @@ function RoundPageInner() {
                       const diffStr = diff === null ? "—" : formatRelToPar(diff);
                       const isFirst = index === 0;
                       const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉";
-
                       return (
                         <div key={entry.team.id} style={{ borderBottom: `1px solid ${GOLD}22` }}>
                           <div style={{ display: "flex", alignItems: "center", padding: "14px 16px", background: isFirst ? `linear-gradient(90deg, ${GREEN}cc, ${DARK_GREEN}cc)` : `${DARK_GREEN}99` }}>
@@ -493,7 +480,6 @@ function RoundPageInner() {
               </div>
             )}
 
-            {/* INDIVIDUAL TAB */}
             {activeTab === "individual" && (
               <div>
                 {individualLeaderboard.length === 0 ? (
@@ -506,12 +492,10 @@ function RoundPageInner() {
                       <div style={{ width: 80, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>SCORE</div>
                       <div style={{ width: 60, textAlign: "center", fontSize: 13, color: GOLD, fontWeight: 700, letterSpacing: 1 }}>THRU</div>
                     </div>
-
                     {individualLeaderboard.map((entry, index) => {
                       const isFirst = index === 0;
                       const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : null;
                       const relStr = formatRelToPar(entry.relativeToPar);
-
                       return (
                         <div key={entry.player.id} style={{ borderBottom: `1px solid ${GOLD}22` }}>
                           <div style={{ display: "flex", alignItems: "center", padding: "14px 16px", background: isFirst ? `linear-gradient(90deg, ${GREEN}cc, ${DARK_GREEN}cc)` : `${DARK_GREEN}99` }}>
@@ -537,7 +521,6 @@ function RoundPageInner() {
               </div>
             )}
 
-            {/* MY STROKES TAB */}
             {activeTab === "mystrokes" && (
               <div>
                 <div style={{ background: GOLD, borderRadius: 14, padding: "14px 16px", marginBottom: 16, boxShadow: "0 4px 12px rgba(201,168,76,0.3)" }}>
@@ -545,7 +528,9 @@ function RoundPageInner() {
                   <div style={{ fontSize: 14, color: `${DARK_GREEN}99`, marginTop: 4, fontWeight: 700 }}>
                     {relativeHandicap === 0
                       ? "You are the baseline — no strokes received"
-                      : `You receive ${relativeHandicap} stroke${relativeHandicap !== 1 ? "s" : ""} this round`}
+                      : isShepherds
+                        ? `You receive ${Math.ceil(relativeHandicap * 1.5)} strokes this round (27 holes)`
+                        : `You receive ${relativeHandicap} stroke${relativeHandicap !== 1 ? "s" : ""} this round`}
                   </div>
                 </div>
 

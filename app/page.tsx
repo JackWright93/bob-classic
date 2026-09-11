@@ -136,19 +136,21 @@ export default function Home() {
       const { data: teamsData } = await supabase.from("teams").select("id, name, round_id");
       const { data: teamPlayersData } = await supabase.from("team_players").select("team_id, player_id");
       const { data: awardsData } = await supabase
-  .from("special_awards")
-  .select("player_id, round_id")
-  .eq("confirmed", true);
+        .from("special_awards")
+        .select("player_id, round_id")
+        .eq("confirmed", true);
 
       if (allTripPlayers && roundData && scoresData && holesData && teamsData && teamPlayersData) {
         const lowest = Math.min(...allTripPlayers.map((p) => p.base_handicap ?? 0));
 
+        // Updated getSR with 1.5x scaling for 27-hole rounds
         const getSR = (mHcp: number, si: number | null, holeNo: number, is27: boolean) => {
           if (!si) return 0;
           if (is27) {
+            const scaledHcp = Math.ceil(mHcp * 1.5);
             const nineGroup = holeNo <= 9 ? 0 : holeNo <= 18 ? 1 : 2;
-            const fullRounds = Math.floor(mHcp / 3);
-            const remainder = mHcp % 3;
+            const fullRounds = Math.floor(scaledHcp / 3);
+            const remainder = scaledHcp % 3;
             if (si <= fullRounds) return 1;
             if (si === fullRounds + 1 && nineGroup < remainder) return 1;
             return 0;
@@ -189,11 +191,13 @@ export default function Home() {
               const t = playerScores.reduce((s, x) => s + x.strokes, 0);
               if (playerScores.length === 9 && t <= 27) pts += 1;
             }
-// Confirmed LD/CTP awards
-const playerAwards = (awardsData ?? []).filter(
-  a => a.player_id === player.id && a.round_id === round.id
-);
-pts += playerAwards.length;
+
+            // Confirmed LD/CTP awards
+            const playerAwards = (awardsData ?? []).filter(
+              a => a.player_id === player.id && a.round_id === round.id
+            );
+            pts += playerAwards.length;
+
             // Live low gross round points
             const allTotals = allTripPlayers.map((p) => {
               const ps = scoresData.filter((s) => s.player_id === p.id && s.round_id === round.id);
