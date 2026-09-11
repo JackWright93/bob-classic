@@ -92,12 +92,19 @@ function LeaderboardInner() {
         );
         pts += confirmedAwards.length;
 
-        // Live low gross round points
+        // Live low NET round points
         const allTotals = players.map(p => {
           const ps = scores.filter(s => s.player_id === p.id && s.round_id === round.id);
           if (ps.length === 0) return null;
           if (ps.length < playerScores.length) return null;
-          return { id: p.id, total: ps.reduce((s, x) => s + x.strokes, 0) };
+          const pHcp = Math.max(0, Math.round((p.base_handicap ?? 0) - lowest));
+          const netTotal = ps.reduce((sum, s) => {
+            const hole = roundHoles.find(h => h.hole_no === s.hole_no);
+            if (!hole) return sum;
+            const sr = getSR(pHcp, hole.stroke_index, s.hole_no, is27);
+            return sum + (s.strokes - sr);
+          }, 0);
+          return { id: p.id, total: netTotal };
         }).filter(Boolean) as { id: string; total: number }[];
 
         if (allTotals.length >= 1) {

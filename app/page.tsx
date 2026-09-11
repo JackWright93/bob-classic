@@ -129,21 +129,17 @@ export default function Home() {
         .or(`player_id.neq.${meData.id},post_type.eq.auto,post_type.eq.roundup`);
       setUnreadFeedCount(count ?? 0);
 
-      // Leaderboard teaser — live scoring including low round and team points
+      // Leaderboard teaser
       const { data: allTripPlayers } = await supabase.from("players").select("id, name, base_handicap, avatar").eq("trip_id", tripId);
       const { data: scoresData } = await supabase.from("hole_scores").select("hole_no, strokes, player_id, round_id");
       const { data: holesData } = await supabase.from("scorecard_holes").select("hole_no, par, stroke_index, scorecard_key");
       const { data: teamsData } = await supabase.from("teams").select("id, name, round_id");
       const { data: teamPlayersData } = await supabase.from("team_players").select("team_id, player_id");
-      const { data: awardsData } = await supabase
-        .from("special_awards")
-        .select("player_id, round_id")
-        .eq("confirmed", true);
+      const { data: awardsData } = await supabase.from("special_awards").select("player_id, round_id").eq("confirmed", true);
 
       if (allTripPlayers && roundData && scoresData && holesData && teamsData && teamPlayersData) {
         const lowest = Math.min(...allTripPlayers.map((p) => p.base_handicap ?? 0));
 
-        // Updated getSR with 1.5x scaling for 27-hole rounds
         const getSR = (mHcp: number, si: number | null, holeNo: number, is27: boolean) => {
           if (!si) return 0;
           if (is27) {
@@ -198,12 +194,19 @@ export default function Home() {
             );
             pts += playerAwards.length;
 
-            // Live low gross round points
+            // Live low NET round points
             const allTotals = allTripPlayers.map((p) => {
               const ps = scoresData.filter((s) => s.player_id === p.id && s.round_id === round.id);
               if (ps.length === 0) return null;
               if (ps.length < playerScores.length) return null;
-              return { id: p.id, total: ps.reduce((s, x) => s + x.strokes, 0) };
+              const pHcp = Math.max(0, Math.round((p.base_handicap ?? 0) - lowest));
+              const netTotal = ps.reduce((sum, s) => {
+                const hole = roundHoles.find(h => h.hole_no === s.hole_no);
+                if (!hole) return sum;
+                const sr = getSR(pHcp, hole.stroke_index, s.hole_no, is27);
+                return sum + (s.strokes - sr);
+              }, 0);
+              return { id: p.id, total: netTotal };
             }).filter(Boolean) as { id: string; total: number }[];
 
             if (allTotals.length >= 1) {
